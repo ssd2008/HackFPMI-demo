@@ -30,7 +30,7 @@ const demoApi = (() => {
     ['demo-main', '20', 'Городская доставка', 'Заказ А-208 прибыл в пункт выдачи', 'Заказ А-208 можно забрать до 25 ноября. Пункт выдачи открыт с 10:00 до 20:00.'],
     ['demo-main', '20', 'Кофейня «Угол»', 'Электронный чек за кофе', 'Капучино и круассан. Сумма чека 550 ₽. Оплата прошла 20 ноября в 09:14.'],
     ['demo-main', '20', 'Городские сервисы', 'Оплата проездного подтверждена', 'Проездной на декабрь оплачен. На турникете покажите код из приложения.'],
-    ['demo-main', '19', 'Команда Айай', 'Добро пожаловать в Айай почту', 'Откройте письмо, выберите другой ящик или попробуйте один из примеров в «Умном поиске».'],
+    ['demo-main', '19', 'Команда Айай', 'Добро пожаловать в Айай почту', 'Нажмите «?» рядом с поиском, чтобы попробовать один из примеров.'],
     ['demo-main', '18', 'Мастерская', 'Вечер открытых дверей', 'В пятницу в 19:00 покажем, как устроена мастерская. Вход свободный.'],
     ['demo-work', '21', 'Рабочая группа', 'План встречи по интерфейсу', 'На встрече в 15:00 посмотрим прототип и соберём замечания по поиску.'],
     ['demo-work', '20', 'Студия', 'Отчёт за неделю', 'На этой неделе подготовили первую версию интерфейса и прототип календаря.'],
@@ -76,7 +76,9 @@ const demoApi = (() => {
     }
     const mailbox = body?.mailbox ?? searchParams.get('mailbox');
     const date = body?.date ?? searchParams.get('date');
-    const visible = letters.filter(letter => letter.mailbox === mailbox && letter.date <= date);
+    const from = body?.date_from ?? searchParams.get('date_from');
+    const to = body?.date_to ?? searchParams.get('date_to') ?? date;
+    const visible = letters.filter(letter => letter.mailbox === mailbox && (!from || letter.date >= from) && letter.date <= to);
     if (pathname === '/api/reminder-candidates') {
       return {items: visible.filter(letter => letter.task).map(({id, subject}) => ({id, subject}))};
     }
