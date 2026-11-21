@@ -9,6 +9,7 @@
   <link rel="icon" href="./static/mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./static/style.css">
   <script src="./static/demo.js" defer></script>
+  <script src="./static/personal.js" defer></script>
   <script src="./static/app.js" defer></script>
 </head>
 <body>
@@ -28,10 +29,16 @@
         </label>
         <button type="submit" id="search-button" class="primary" disabled>Найти</button>
       </form>
-      <span class="demo-label" id="demo-label" hidden title="Вымышленные письма для проверки интерфейса">
-        <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#flask"></use></svg>
-        <span>Демо</span>
-      </span>
+      <div class="topbar-actions">
+        <span class="demo-label" id="demo-label" hidden title="Вымышленные письма для проверки интерфейса">
+          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#flask"></use></svg>
+          <span>Демо</span>
+        </span>
+        <button id="assistant-open" class="secondary assistant-open" type="button" aria-controls="assistant-panel" aria-expanded="false" disabled>
+          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#sparkle"></use></svg>
+          <span>Ассистент</span>
+        </button>
+      </div>
     </header>
 
     <aside class="sidebar" aria-label="Навигация по почте">
@@ -126,6 +133,35 @@
       </section>
     </main>
   </div>
+
+  <aside class="assistant-panel" id="assistant-panel" aria-labelledby="assistant-heading" hidden>
+    <header class="assistant-bar">
+      <div>
+        <h2 id="assistant-heading">Ассистент почты</h2>
+        <p id="assistant-box"></p>
+      </div>
+      <button class="icon-button" id="assistant-close" type="button" aria-label="Закрыть ассистента">
+        <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#close"></use></svg>
+      </button>
+    </header>
+    <div class="assistant-content">
+      <div class="assistant-examples" aria-label="Примеры вопросов">
+        <button class="example-button" type="button">На какие мероприятия меня пригласили?</button>
+        <button class="example-button" type="button">Сообщи, когда придёт приглашение на ЕГЭ</button>
+      </div>
+      <div id="assistant-results" class="assistant-results" aria-live="polite"></div>
+      <section id="watch-panel" class="watch-panel" aria-labelledby="watch-heading" hidden>
+        <h3 id="watch-heading">Отслеживаемые письма</h3>
+        <div id="watch-items"></div>
+      </section>
+    </div>
+    <form id="assistant-form" class="assistant-form">
+      <label class="sr-only" for="assistant-query">Вопрос по почте</label>
+      <textarea id="assistant-query" rows="2" maxlength="1000" placeholder="Спросите о письмах или задайте отслеживание" required></textarea>
+      <button class="primary" type="submit">Спросить</button>
+    </form>
+  </aside>
+  <div id="notifications" class="notifications" role="region" aria-label="Уведомления"></div>
 
   <dialog class="reader" id="reader" aria-labelledby="reader-heading">
     <div class="reader-frame">

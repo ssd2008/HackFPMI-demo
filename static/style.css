@@ -539,3 +539,135 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
   .urgent-panel { padding: 12px; }
   .row-deadline { max-width: 15ch; white-space: normal; }
 }
+
+.topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.assistant-open { color: var(--accent-strong); }
+.assistant-panel {
+  position: fixed;
+  inset: calc(var(--header) + 8px) 12px 12px auto;
+  z-index: 4;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(390px, calc(100vw - 24px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: 0 12px 36px #152b4824;
+}
+.assistant-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 15px;
+  border-bottom: 1px solid var(--line);
+}
+.assistant-bar h2 { font-size: 1.05rem; }
+.assistant-bar p { margin-top: 3px; color: var(--muted); font-size: .8125rem; }
+.assistant-content { overflow: auto; padding: 14px; }
+.assistant-examples, .assistant-results, #watch-items { display: grid; gap: 7px; }
+.assistant-results { margin-top: 15px; }
+.assistant-results p { font-size: .9rem; }
+.assistant-reply { font-weight: 650; }
+.assistant-source {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.assistant-source:hover { background: #f3f7fc; }
+.assistant-source span { color: var(--muted); font-size: .8125rem; line-height: 1.35; }
+.watch-panel { margin-top: 17px; }
+.watch-panel h3 { margin: 0 0 6px; font-size: .875rem; }
+.watch-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--canvas);
+}
+.watch-item div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.watch-item strong { font-size: .8125rem; }
+.watch-item p { color: var(--muted); font-size: .75rem; }
+.watch-item button { min-height: 30px; padding: 4px; font-size: .8125rem; }
+.assistant-form { display: flex; align-items: end; gap: 7px; padding: 10px; border-top: 1px solid var(--line); }
+.assistant-form textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 110px;
+  padding: 8px;
+  border: 1px solid #d5deeb;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: .875rem;
+  resize: vertical;
+}
+.assistant-form button { min-height: 40px; padding-inline: 10px; }
+
+.mail-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.mark-action .icon { color: #825314; }
+.mark-action[aria-pressed="true"] { border-color: #efdfc3; background: #fffcf3; color: #774a18; }
+.reminder-status { color: var(--muted); font-size: .8125rem; }
+.reminder-form {
+  display: flex;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--canvas);
+}
+.reminder-form label { display: grid; gap: 4px; font-size: .8125rem; }
+.reminder-form input { min-height: 40px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); }
+.reminder-form button { min-height: 40px; }
+.notifications {
+  z-index: 5;
+  position: fixed;
+  top: calc(var(--header) + 14px);
+  right: 12px;
+  display: grid;
+  gap: 7px;
+  width: min(335px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--header) - 25px);
+  overflow: auto;
+  pointer-events: none;
+}
+.notification {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #d9e7f8;
+  border-radius: 11px;
+  background: var(--paper);
+  box-shadow: 0 6px 16px #152b4820;
+}
+.notification > .icon { margin-top: 4px; color: var(--accent); }
+.notification-text { overflow-wrap: anywhere; }
+.notification-text strong { font-size: .875rem; }
+.notification-text p { margin-top: 4px; color: var(--muted); font-size: .8125rem; }
+.notification-close { width: 30px; min-height: 30px; }
+.notification-close .icon { width: 16px; height: 16px; }
+.notification-open { grid-column: 2; justify-self: start; min-height: 29px; padding: 3px 6px; }
+@media (max-width: 800px) {
+  .assistant-open { min-width: 40px; }
+  .assistant-open span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-width: 620px) {
+  .assistant-open { min-height: 34px; min-width: 36px; padding: 5px; }
+  .topbar-actions { grid-area: 1 / 2; }
+}
