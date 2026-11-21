@@ -345,6 +345,23 @@ function makeMailRow(mail) {
   row.append(mailGlyph(mail), senderLabel, lines, date);
   return row;
 }
+function inboxRows() {
+  const rows = document.createDocumentFragment();
+  const previousDay = new Date(state.date + 'T12:00:00Z');
+  previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+  const yesterday = Number.isNaN(previousDay.getTime()) ? '' : previousDay.toISOString().slice(0, 10);
+  let group;
+  for (const mail of state.items) {
+    const date = mail.date || '';
+    if (date !== group) {
+      const label = date && date === state.date ? 'Сегодня' : date && date === yesterday ? 'Вчера' : dateText(date, true);
+      rows.append(node('h3', 'mail-day', label));
+      group = date;
+    }
+    rows.append(makeMailRow(mail));
+  }
+  return rows;
+}
 function renderList() {
   const searching = Boolean(state.query);
   ui.list.setAttribute('aria-busy', 'false');
@@ -363,7 +380,8 @@ function renderList() {
     announce(searching ? 'Подходящих писем не найдено.' : 'На выбранную дату писем нет.');
     return;
   }
-  ui.list.replaceChildren(...state.items.map(makeMailRow));
+  if (searching) ui.list.replaceChildren(...state.items.map(makeMailRow));
+  else ui.list.replaceChildren(inboxRows());
   const pageSize = searching ? searchPageSize : inboxPageSize;
   ui.paging.hidden = state.total <= pageSize;
   const stop = state.offset + state.items.length;
@@ -598,7 +616,7 @@ function setDemoMode(enabled) {
   ui.mobile.disabled = true;
   ui.mobile.replaceChildren(node('option', '', 'Почтовый ящик'));
   ui.date.disabled = true;
-  ui.dateLabel.textContent = 'Выбрать дату';
+  ui.dateLabel.textContent = 'Дата запроса';
   ui.examples.hidden = true;
   ui.sidebar.replaceChildren();
   byId('box-total').textContent = '';

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f6fb">
+  <meta name="theme-color" content="#f0f2f5">
   <title>Входящие — Айай почта</title>
   <meta name="mailsearch-api-origin" content="" data-external>
   <link rel="icon" href="./static/mark.svg" type="image/svg+xml">
@@ -17,7 +17,7 @@
     <header class="topbar">
       <a class="brand" href="./" aria-label="Айай почта, главная">
         <img src="./static/mark.svg" width="38" height="38" alt="">
-        <span>Айай <span>почта</span></span>
+        <span>Айай почта</span>
       </a>
       <form id="search-form" role="search">
         <label class="search-input-wrap">
@@ -51,6 +51,15 @@
         <select id="mobile-box-select" disabled><option>Почтовый ящик</option></select>
         <svg class="icon select-chevron" aria-hidden="true"><use href="./static/icons.svg#chevron-down"></use></svg>
       </label>
+      <details class="quick-search" id="quick-search" open>
+        <summary>
+          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#sparkle"></use></svg>
+          <span>Умный поиск</span>
+          <svg class="icon quick-chevron" aria-hidden="true"><use href="./static/icons.svg#chevron-down"></use></svg>
+        </summary>
+        <p id="search-description">Опишите, что помните о письме, своими словами.</p>
+        <div id="examples" class="examples" aria-label="Примеры поиска" hidden></div>
+      </details>
       <div class="sidebar-footer">
         <button id="leave-demo" type="button" class="text-action" hidden>Подключиться к API</button>
       </div>
@@ -62,71 +71,48 @@
           <h1 id="page-heading">Входящие</h1>
           <p id="page-context" class="page-context" hidden></p>
         </div>
-        <button type="button" id="back-inbox" class="secondary" hidden>
-          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#inbox"></use></svg>
-          <span>Во входящие</span>
-        </button>
+        <div class="workspace-actions">
+          <button type="button" id="back-inbox" class="secondary" hidden>
+            <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#inbox"></use></svg>
+            <span>Во входящие</span>
+          </button>
+          <label class="date-surface" title="«Вчера» и другие периоды отсчитываются от этой даты">
+            <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#calendar"></use></svg>
+            <span id="date-readable">Дата запроса</span>
+            <svg class="icon date-chevron" aria-hidden="true"><use href="./static/icons.svg#chevron-down"></use></svg>
+            <input id="asof-date" type="date" aria-label="Дата запроса" required disabled>
+          </label>
+        </div>
       </div>
       <p id="query-notice" class="query-notice" hidden></p>
 
-      <div class="workspace-grid">
-        <div class="mail-content">
-          <section id="answer-panel" class="answer-panel" aria-label="Ответ по найденным письмам" hidden></section>
-          <section class="mail-section" id="mail-section" aria-labelledby="list-title">
-            <div class="list-toolbar">
-              <div class="list-name">
-                <h2 id="list-title">Все письма</h2>
-                <span class="count-badge" id="mail-count" hidden></span>
-              </div>
-              <span class="order-label" id="order-label" hidden>
-                <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#sort"></use></svg>
-                <span id="sort-text">Сначала новые</span>
-              </span>
-            </div>
-            <div id="list-box" class="list-box" aria-busy="true">
-              <div class="list-state"><span class="spinner" aria-hidden="true"></span><span>Загружаем письма…</span></div>
-            </div>
-            <div class="paging" id="paging" hidden>
-              <span id="paging-label"></span>
-              <div class="paging-buttons">
-                <button class="icon-button" id="prev-page" type="button" aria-label="Предыдущая страница" title="Предыдущая страница">
-                  <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#chevron-left"></use></svg>
-                </button>
-                <button class="icon-button" id="next-page" type="button" aria-label="Следующая страница" title="Следующая страница">
-                  <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#chevron-right"></use></svg>
-                </button>
-              </div>
-            </div>
-          </section>
+      <section id="answer-panel" class="answer-panel" aria-label="Ответ по найденным письмам" hidden></section>
+      <section class="mail-section" id="mail-section" aria-labelledby="list-title">
+        <div class="list-toolbar">
+          <div class="list-name">
+            <h2 id="list-title">Все письма</h2>
+            <span class="count-badge" id="mail-count" hidden></span>
+          </div>
+          <span class="order-label" id="order-label" hidden>
+            <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#sort"></use></svg>
+            <span id="sort-text">Сначала новые</span>
+          </span>
         </div>
-
-        <aside class="widgets" aria-label="Инструменты почты">
-          <section class="search-widget" aria-labelledby="search-heading">
-            <div class="widget-illustration" aria-hidden="true">
-              <span class="illustration-sheet"></span>
-              <svg class="icon illustration-mail"><use href="./static/icons.svg#box"></use></svg>
-              <svg class="icon illustration-star"><use href="./static/icons.svg#sparkle"></use></svg>
-            </div>
-            <h2 id="search-heading">Умный поиск</h2>
-            <p id="search-description">Опишите, что помните о письме, своими словами.</p>
-            <div id="examples" class="examples" aria-label="Примеры поиска" hidden></div>
-          </section>
-          <section class="date-widget" aria-labelledby="date-heading">
-            <div class="widget-title">
-              <span class="widget-mark">
-                <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#calendar"></use></svg>
-              </span>
-              <h2 id="date-heading">Дата запроса</h2>
-            </div>
-            <label class="date-surface" title="Изменить дату запроса">
-              <span id="date-readable">Выбрать дату</span>
-              <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#chevron-down"></use></svg>
-              <input id="asof-date" type="date" aria-label="Дата запроса" required disabled>
-            </label>
-            <p>От этой даты отсчитываются «вчера» и другие периоды в поиске.</p>
-          </section>
-        </aside>
-      </div>
+        <div id="list-box" class="list-box" aria-busy="true">
+          <div class="list-state"><span class="spinner" aria-hidden="true"></span><span>Загружаем письма…</span></div>
+        </div>
+        <div class="paging" id="paging" hidden>
+          <span id="paging-label"></span>
+          <div class="paging-buttons">
+            <button class="icon-button" id="prev-page" type="button" aria-label="Предыдущая страница" title="Предыдущая страница">
+              <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#chevron-left"></use></svg>
+            </button>
+            <button class="icon-button" id="next-page" type="button" aria-label="Следующая страница" title="Следующая страница">
+              <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#chevron-right"></use></svg>
+            </button>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
