@@ -2,7 +2,7 @@
 
 const byId = id => document.getElementById(id);
 const ui = {
-  sidebar: byId('mailboxes'), mobile: byId('mobile-box-select'),
+  mailbox: byId('mailbox-select'),
   dateFilter: byId('date-filter'), dateFrom: byId('date-from'), dateTo: byId('date-to'), dateLabel: byId('date-readable'),
   title: byId('page-heading'), listTitle: byId('list-title'),
   list: byId('list-box'), count: byId('mail-count'), order: byId('order-label'),
@@ -139,23 +139,13 @@ function messageState(title, detail, iconName, button) {
 }
 
 function populateMailboxes() {
-  const sidebar = document.createDocumentFragment();
-  const options = document.createDocumentFragment();
-  state.boxes.forEach(box => {
-    const button = action('', 'box-button', () => openMailbox(box.id));
-    button.dataset.id = box.id;
-    button.title = box.name + (box.label ? '' : ' · ' + box.id) + ' · ' + mailCount(box.count);
-    button.setAttribute('aria-label', box.name + ', ' + mailCount(box.count));
-    button.append(icon('box'), node('span', 'box-name', box.name), node('span', 'box-count', numberFormat.format(box.count)));
-    sidebar.append(button);
-    const opt = node('option', '', box.name);
-    opt.value = box.id;
-    options.append(opt);
+  const options = state.boxes.map(box => {
+    const option = node('option', '', box.name);
+    option.value = box.id;
+    return option;
   });
-  ui.sidebar.replaceChildren(sidebar);
-  ui.mobile.replaceChildren(options);
-  ui.mobile.disabled = !state.boxes.length;
-  byId('box-total').textContent = numberFormat.format(state.boxes.length);
+  ui.mailbox.replaceChildren(...(options.length ? options : [node('option', '', 'Почтовый ящик')]));
+  ui.mailbox.disabled = !options.length;
 }
 function setDate(value) {
   state.lastDates.set(state.mailbox, value);
@@ -215,11 +205,7 @@ function renderExamples(box) {
   });
 }
 function showMailboxSelection(box) {
-  for (const button of ui.sidebar.children) {
-    if (button.dataset.id === box.id) button.setAttribute('aria-current', 'true');
-    else button.removeAttribute('aria-current');
-  }
-  ui.mobile.value = box.id;
+  ui.mailbox.value = box.id;
   const context = byId('page-context');
   const detail = state.demo ? 'вымышленные письма' : box.label ? mailCount(box.count) : box.id;
   context.textContent = box.name + ' · ' + detail;
@@ -690,7 +676,7 @@ ui.actions.addEventListener('click', () => {
   if (!state.actionsOnly) showFolder(true);
   window.scrollTo(0, 0);
 });
-ui.mobile.addEventListener('change', () => openMailbox(ui.mobile.value));
+ui.mailbox.addEventListener('change', () => openMailbox(ui.mailbox.value));
 byId('date-filter-form').addEventListener('submit', event => {
   event.preventDefault();
   const from = ui.dateFrom.value, to = ui.dateTo.value;
@@ -756,16 +742,13 @@ function resetMailboxView() {
   ui.input.value = '';
   ui.input.disabled = true;
   ui.search.disabled = true;
-  ui.mobile.disabled = true;
-  ui.mobile.replaceChildren(node('option', '', 'Почтовый ящик'));
+  populateMailboxes();
   ui.dateFilter.hidden = true;
   ui.dateFilter.open = false;
   renderDateRange();
   ui.examples.hidden = true;
   ui.examples.replaceChildren();
   ui.urgentItems.replaceChildren();
-  ui.sidebar.replaceChildren();
-  byId('box-total').textContent = '';
   byId('page-context').hidden = true;
   byId('page-context').textContent = '';
   byId('nav-inbox').disabled = true;
