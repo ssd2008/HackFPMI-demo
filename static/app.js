@@ -17,6 +17,7 @@ const searchLimit = 30;
 const apiConfig = document.querySelector('meta[name="mailsearch-api-origin"]');
 const apiOrigin = apiConfig.hasAttribute('data-external') ? apiConfig.content : location.origin;
 const state = {
+  demo: !apiOrigin || new URLSearchParams(location.search).get('demo') === '1',
   boxes: [], mailbox: '', date: '', query: '', offset: 0, total: 0,
   items: [], searchResults: [], lastAnswer: null, lastDates: new Map()
 };
@@ -85,6 +86,7 @@ function current(kind, controller) {
   return requests.get(kind) === controller && !controller.signal.aborted;
 }
 async function fetchJSON(path, controller, body) {
+  if (state.demo) return demoApi(path, body);
   const options = {signal: controller.signal, cache: 'no-store'};
   if (body !== undefined) {
     options.method = 'POST';
@@ -129,7 +131,7 @@ function populateMailboxes() {
     button.setAttribute('aria-label', box.name + ', ' + mailCount(box.count));
     button.append(icon('box'), node('span', 'box-name', box.name), node('span', 'box-count', numberFormat.format(box.count)));
     sidebar.append(button);
-    const opt = node('option', '', box.name + ' · ' + box.id);
+    const opt = node('option', '', box.name);
     opt.value = box.id;
     options.append(opt);
   });
@@ -137,8 +139,6 @@ function populateMailboxes() {
   ui.mobile.replaceChildren(options);
   ui.mobile.disabled = !state.boxes.length;
   byId('box-total').textContent = numberFormat.format(state.boxes.length);
-  byId('archive-count').textContent = mailCount(state.boxes.reduce((sum, box) => sum + box.count, 0));
-  byId('archive-stats').hidden = !state.boxes.length;
 }
 function setDate(value) {
   state.date = value;
@@ -151,7 +151,6 @@ function renderExamples(box) {
   ui.examples.hidden = !rows.length;
   ui.examples.replaceChildren();
   if (!rows.length) return;
-  ui.examples.append(node('span', 'example-label', 'Примеры'));
   rows.forEach(row => {
     const button = action('', 'example-button', () => {
       setDate(row.date);
@@ -177,9 +176,10 @@ function openMailbox(id, initialDate) {
     else button.removeAttribute('aria-current');
   }
   ui.mobile.value = id;
-  byId('current-box-label').textContent = box.name;
-  byId('mobile-current-box').textContent = box.name;
-  byId('current-box-id').textContent = id;
+  const context = byId('page-context');
+  context.textContent = state.demo ? box.name + ' · вымышленные письма' : box.name + ' · ' + id;
+  context.hidden = false;
+  byId('nav-inbox').disabled = false;
   ui.date.disabled = false;
   ui.input.disabled = false;
   ui.search.disabled = false;
@@ -195,7 +195,7 @@ async function loadMailboxes() {
     if (!current('boxes', controller)) return;
     const sorted = [...data.mailboxes].sort((a, b) => a.id.localeCompare(b.id));
     state.boxes = sorted.map((box, index) => ({
-      ...box, name: 'Ящик ' + String(index + 1).padStart(2, '0')
+      ...box, name: state.demo ? box.name : 'Ящик ' + String(index + 1).padStart(2, '0')
     }));
     populateMailboxes();
     if (!sorted.length) {
@@ -211,16 +211,22 @@ async function loadMailboxes() {
       ? 'Проверьте, что локальный сервер запущен.'
       : 'Сервер демо недоступен. Попробуйте ещё раз.';
     showListError('Не удалось открыть архив', detail, loadMailboxes);
+    if (!state.demo) {
+      ui.list.firstElementChild.append(action('Открыть демо', 'text-action', () => setDemoMode(true)));
+    }
   }
 }
 function setMode() {
   const searching = Boolean(state.query);
   ui.title.textContent = searching ? 'Поиск по почте' : 'Входящие';
-  ui.listTitle.textContent = searching ? 'Результаты поиска' : 'Письма';
+  ui.listTitle.textContent = searching ? 'Найденные письма' : 'Все письма';
+  const nav = byId('nav-inbox');
+  if (searching) nav.removeAttribute('aria-current');
+  else nav.setAttribute('aria-current', 'page');
   ui.inbox.hidden = !searching;
   byId('sort-text').textContent = searching ? 'По релевантности' : 'Сначала новые';
   updateQueryNotice();
-  document.title = ui.title.textContent + ' — Конверт';
+  document.title = ui.title.textContent + ' — Айай почта';
 }
 function updateQueryNotice() {
   const notice = byId('query-notice');
@@ -326,14 +332,17 @@ function makeMailRow(mail) {
   const row = action('', 'mail-row', () => openMail(mail.id, mail.subject));
   const lines = node('span', 'mail-lines');
   const subject = mail.subject || 'Без темы';
-  const snippet = mail.snippet || mail.sender || '';
+  const sender = mail.sender || 'Без отправителя';
+  const snippet = mail.snippet || '';
   lines.append(node('span', 'mail-subject', subject));
   if (snippet) lines.append(node('span', 'mail-snippet', snippet));
   const date = node(mail.date ? 'time' : 'span', 'row-date', dateText(mail.date));
   if (mail.date) date.dateTime = mail.date;
   date.title = dateText(mail.date, true);
-  row.setAttribute('aria-label', 'Открыть письмо: ' + subject + ', ' + date.title);
-  row.append(mailGlyph(mail), lines, date);
+  row.setAttribute('aria-label', 'Открыть письмо: ' + subject + ', ' + sender + ', ' + date.title);
+  const senderLabel = node('span', 'mail-sender', sender);
+  senderLabel.title = sender;
+  row.append(mailGlyph(mail), senderLabel, lines, date);
   return row;
 }
 function renderList() {
@@ -546,6 +555,10 @@ ui.input.addEventListener('input', () => {
   else updateQueryNotice();
 });
 ui.inbox.addEventListener('click', showInbox);
+byId('nav-inbox').addEventListener('click', () => {
+  if (state.query) showInbox();
+  window.scrollTo(0, 0);
+});
 ui.mobile.addEventListener('change', () => openMailbox(ui.mobile.value));
 ui.date.addEventListener('change', () => {
   if (!ui.date.value || !ui.date.validity.valid) { ui.date.value = state.date; return; }
@@ -571,9 +584,33 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   ui.input.focus();
 });
-if (apiOrigin) {
+function setDemoMode(enabled) {
+  closeReader();
+  clearAnswer();
+  cancel('list');
+  state.demo = enabled;
+  state.mailbox = '';
+  state.date = '';
+  state.query = '';
+  ui.input.value = '';
+  ui.input.disabled = true;
+  ui.search.disabled = true;
+  ui.mobile.disabled = true;
+  ui.mobile.replaceChildren(node('option', '', 'Почтовый ящик'));
+  ui.date.disabled = true;
+  ui.dateLabel.textContent = 'Выбрать дату';
+  ui.examples.hidden = true;
+  ui.sidebar.replaceChildren();
+  byId('box-total').textContent = '';
+  byId('page-context').hidden = true;
+  byId('nav-inbox').disabled = true;
+  byId('demo-label').hidden = !enabled;
+  byId('search-description').textContent = enabled
+    ? 'Поиск по словам в вымышленных письмах.'
+    : 'Опишите, что помните о письме, своими словами.';
+  byId('leave-demo').hidden = !enabled || !apiOrigin;
+  setMode();
   loadMailboxes();
-} else {
-  ui.list.setAttribute('aria-busy', 'false');
-  ui.list.replaceChildren(messageState('Сервер демо ещё не подключён', '', 'archive'));
 }
+byId('leave-demo').addEventListener('click', () => setDemoMode(false));
+setDemoMode(state.demo);
