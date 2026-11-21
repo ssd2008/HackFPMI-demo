@@ -40,6 +40,10 @@
           <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#inbox"></use></svg>
           <span>Входящие</span>
         </button>
+        <button type="button" class="nav-inbox" id="nav-actions" disabled>
+          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#checklist"></use></svg>
+          <span>Требуют действия</span>
+        </button>
       </div>
       <div class="sidebar-boxes">
         <div class="sidebar-label"><span>Почтовые ящики</span><span id="box-total"></span></div>
@@ -86,6 +90,13 @@
       </div>
       <p id="query-notice" class="query-notice" hidden></p>
 
+      <section id="urgent-panel" class="urgent-panel" aria-labelledby="urgent-heading" hidden>
+        <h2 id="urgent-heading">
+          <svg class="icon" aria-hidden="true"><use href="./static/icons.svg#clock"></use></svg>
+          Ближайшие дедлайны
+        </h2>
+        <div id="urgent-items" class="urgent-items"></div>
+      </section>
       <section id="answer-panel" class="answer-panel" aria-label="Ответ по найденным письмам" hidden></section>
       <section class="mail-section" id="mail-section" aria-labelledby="list-title">
         <div class="list-toolbar">

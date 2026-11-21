@@ -7,7 +7,8 @@ const ui = {
   title: byId('page-heading'), listTitle: byId('list-title'),
   list: byId('list-box'), count: byId('mail-count'), order: byId('order-label'),
   input: byId('search-input'), search: byId('search-button'), examples: byId('examples'),
-  answer: byId('answer-panel'), inbox: byId('back-inbox'),
+  answer: byId('answer-panel'), inbox: byId('back-inbox'), actions: byId('nav-actions'),
+  urgent: byId('urgent-panel'), urgentItems: byId('urgent-items'),
   paging: byId('paging'), prev: byId('prev-page'), next: byId('next-page'),
   reader: byId('reader'), readerContent: byId('reader-content'), status: byId('announce')
 };
@@ -18,7 +19,7 @@ const apiConfig = document.querySelector('meta[name="mailsearch-api-origin"]');
 const apiOrigin = apiConfig.hasAttribute('data-external') ? apiConfig.content : location.origin;
 const state = {
   demo: !apiOrigin || new URLSearchParams(location.search).get('demo') === '1',
-  boxes: [], mailbox: '', date: '', query: '', offset: 0, total: 0,
+  actionsOnly: false, boxes: [], mailbox: '', date: '', query: '', offset: 0, total: 0,
   items: [], searchResults: [], lastAnswer: null, lastDates: new Map()
 };
 const requests = new Map();
@@ -180,11 +181,12 @@ function openMailbox(id, initialDate) {
   context.textContent = state.demo ? box.name + ' · вымышленные письма' : box.name + ' · ' + id;
   context.hidden = false;
   byId('nav-inbox').disabled = false;
+  ui.actions.disabled = false;
   ui.date.disabled = false;
   ui.input.disabled = false;
   ui.search.disabled = false;
   renderExamples(box);
-  showInbox();
+  showFolder(state.actionsOnly);
   window.scrollTo(0, 0);
 }
 async function loadMailboxes() {
@@ -218,12 +220,15 @@ async function loadMailboxes() {
 }
 function setMode() {
   const searching = Boolean(state.query);
-  ui.title.textContent = searching ? 'Поиск по почте' : 'Входящие';
-  ui.listTitle.textContent = searching ? 'Найденные письма' : 'Все письма';
+  ui.title.textContent = searching ? 'Поиск по почте' : state.actionsOnly ? 'Требуют действия' : 'Входящие';
+  ui.listTitle.textContent = searching ? 'Найденные письма' : state.actionsOnly ? 'Письма с просьбами' : 'Все письма';
   const nav = byId('nav-inbox');
-  if (searching) nav.removeAttribute('aria-current');
+  if (searching || state.actionsOnly) nav.removeAttribute('aria-current');
   else nav.setAttribute('aria-current', 'page');
+  if (state.actionsOnly) ui.actions.setAttribute('aria-current', 'page');
+  else ui.actions.removeAttribute('aria-current');
   ui.inbox.hidden = !searching;
+  ui.urgent.hidden = true;
   byId('sort-text').textContent = searching ? 'По релевантности' : 'Сначала новые';
   updateQueryNotice();
   document.title = ui.title.textContent + ' — Айай почта';
@@ -250,34 +255,42 @@ function showListError(title, detail, retry) {
   announce(title);
 }
 function showInbox() {
+  showFolder(false);
+}
+function showFolder(actionsOnly) {
+  state.actionsOnly = actionsOnly;
   ui.input.value = '';
   state.query = '';
   state.searchResults = [];
   state.total = 0;
   clearAnswer();
   setMode();
-  loadInbox(0);
+  loadFolder(0);
 }
-async function loadInbox(offset) {
+async function loadFolder(offset) {
   const controller = start('list');
   setListLoading('Загружаем письма…');
+  const endpoint = state.actionsOnly ? '/api/actions' : '/api/inbox';
   try {
-    const data = await fetchJSON('/api/inbox' + params({
+    const data = await fetchJSON(endpoint + params({
       mailbox: state.mailbox, date: state.date, offset, limit: inboxPageSize
     }), controller);
     if (!current('list', controller)) return;
     state.items = data.items;
     state.total = data.total;
     state.offset = data.offset;
+    renderUrgent(data.urgent || []);
     renderList();
   } catch (error) {
     if (!current('list', controller)) return;
-    showListError('Не удалось загрузить письма', 'Проверьте подключение к локальной почте.', () => loadInbox(offset));
+    ui.urgent.hidden = true;
+    showListError('Не удалось загрузить письма', 'Проверьте подключение к локальной почте.', () => loadFolder(offset));
   }
 }
 async function showSearch(query) {
   const text = query.trim();
   if (!text) { showInbox(); return; }
+  state.actionsOnly = false;
   state.query = text;
   state.offset = 0;
   state.total = 0;
@@ -333,17 +346,35 @@ function makeMailRow(mail) {
   const lines = node('span', 'mail-lines');
   const subject = mail.subject || 'Без темы';
   const sender = mail.sender || 'Без отправителя';
-  const snippet = mail.snippet || '';
+  const snippet = state.actionsOnly ? mail.evidence : mail.snippet || '';
   lines.append(node('span', 'mail-subject', subject));
   if (snippet) lines.append(node('span', 'mail-snippet', snippet));
-  const date = node(mail.date ? 'time' : 'span', 'row-date', dateText(mail.date));
-  if (mail.date) date.dateTime = mail.date;
-  date.title = dateText(mail.date, true);
+  const shownDate = state.actionsOnly ? mail.deadline : mail.date;
+  const date = node(shownDate ? 'time' : 'span', 'row-date', state.actionsOnly ? deadlineText(mail) : dateText(shownDate));
+  if (shownDate) date.dateTime = shownDate;
+  date.title = state.actionsOnly ? deadlineText(mail) : dateText(shownDate, true);
+  if (state.actionsOnly && shownDate) date.classList.add('row-deadline');
+  if (state.actionsOnly && shownDate && shownDate < state.date) date.classList.add('past-deadline');
   row.setAttribute('aria-label', 'Открыть письмо: ' + subject + ', ' + sender + ', ' + date.title);
   const senderLabel = node('span', 'mail-sender', sender);
   senderLabel.title = sender;
   row.append(mailGlyph(mail), senderLabel, lines, date);
   return row;
+}
+function deadlineText(mail) {
+  if (!mail.deadline) return 'Без срока';
+  const date = dateText(mail.deadline);
+  return 'До ' + date + (mail.deadline_time ? ', ' + mail.deadline_time : '');
+}
+function renderUrgent(letters) {
+  ui.urgent.hidden = !letters.length;
+  ui.urgentItems.replaceChildren(...letters.map(mail => {
+    const button = action('', 'urgent-card', () => openMail(mail.id, mail.subject));
+    button.append(node('span', 'urgent-date', deadlineText(mail)),
+      node('strong', '', mail.subject || 'Без темы'),
+      node('span', 'urgent-evidence', mail.evidence));
+    return button;
+  }));
 }
 function inboxRows() {
   const rows = document.createDocumentFragment();
@@ -373,14 +404,15 @@ function renderList() {
   ui.order.hidden = !state.items.length;
   if (!state.items.length) {
     const reset = searching ? action('Во входящие', 'secondary', showInbox) : undefined;
-    ui.list.replaceChildren(searching
-      ? messageState('Подходящих писем не найдено', 'Измените запрос или дату поиска.', 'search', reset)
-      : messageState('На эту дату писем нет', 'Выберите другую дату или другой ящик.', 'inbox'));
+    const title = searching ? 'Подходящих писем не найдено' :
+      state.actionsOnly ? 'Писем с явными просьбами нет' : 'На эту дату писем нет';
+    const detail = searching ? 'Измените запрос или дату поиска.' : 'Выберите другую дату или другой ящик.';
+    ui.list.replaceChildren(messageState(title, detail, searching ? 'search' : 'inbox', reset));
     ui.paging.hidden = true;
-    announce(searching ? 'Подходящих писем не найдено.' : 'На выбранную дату писем нет.');
+    announce(title + '.');
     return;
   }
-  if (searching) ui.list.replaceChildren(...state.items.map(makeMailRow));
+  if (searching || state.actionsOnly) ui.list.replaceChildren(...state.items.map(makeMailRow));
   else ui.list.replaceChildren(inboxRows());
   const pageSize = searching ? searchPageSize : inboxPageSize;
   ui.paging.hidden = state.total <= pageSize;
@@ -396,7 +428,7 @@ function changePage(direction) {
   const offset = Math.max(0, state.offset + direction * pageSize);
   if (offset === state.offset || offset >= state.total) return;
   if (state.query) renderSearchPage(offset);
-  else loadInbox(offset);
+  else loadFolder(offset);
   byId('mail-section').scrollIntoView({block: 'start'});
 }
 
@@ -574,7 +606,11 @@ ui.input.addEventListener('input', () => {
 });
 ui.inbox.addEventListener('click', showInbox);
 byId('nav-inbox').addEventListener('click', () => {
-  if (state.query) showInbox();
+  if (state.query || state.actionsOnly) showInbox();
+  window.scrollTo(0, 0);
+});
+ui.actions.addEventListener('click', () => {
+  if (!state.actionsOnly) showFolder(true);
   window.scrollTo(0, 0);
 });
 ui.mobile.addEventListener('change', () => openMailbox(ui.mobile.value));
@@ -582,9 +618,10 @@ ui.date.addEventListener('change', () => {
   if (!ui.date.value || !ui.date.validity.valid) { ui.date.value = state.date; return; }
   if (ui.date.value === state.date) return;
   setDate(ui.date.value);
+  ui.urgent.hidden = true;
   closeReader();
   if (state.query) showSearch(state.query);
-  else loadInbox(0);
+  else loadFolder(0);
 });
 byId('reader-close').addEventListener('click', closeReader);
 ui.reader.addEventListener('close', () => { if (!ui.reader.open) cancel('mail'); });
@@ -607,6 +644,7 @@ function setDemoMode(enabled) {
   clearAnswer();
   cancel('list');
   state.demo = enabled;
+  state.actionsOnly = false;
   state.mailbox = '';
   state.date = '';
   state.query = '';
@@ -622,6 +660,7 @@ function setDemoMode(enabled) {
   byId('box-total').textContent = '';
   byId('page-context').hidden = true;
   byId('nav-inbox').disabled = true;
+  ui.actions.disabled = true;
   byId('demo-label').hidden = !enabled;
   byId('search-description').textContent = enabled
     ? 'Поиск по словам в вымышленных письмах.'

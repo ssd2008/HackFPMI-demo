@@ -22,8 +22,11 @@ const demoApi = (() => {
   ];
   const entries = [
     ['demo-main', '21', 'Книжный клуб', 'Подборка на ноябрь', 'В ноябре читаем рассказы. Встречаемся в субботу в 16:00 в читальном зале.'],
-    ['demo-main', '21', 'Мастерская', 'Документы для регистрации', 'Для регистрации понадобятся паспорт и заполненная анкета. Анкету можно принести на первую встречу.'],
+    ['demo-main', '21', 'Мастерская', 'Документы для регистрации', 'Пожалуйста, пришлите заполненную анкету до 22 ноября 2026 в 18:00.',
+      {deadline: '2026-11-22', deadline_time: '18:00'}],
     ['demo-main', '21', 'Маяк Маркет', 'Возврат по заказу А-104', 'Возврат 1 490 ₽ принят. Деньги поступят на карту в течение трёх рабочих дней.'],
+    ['demo-main', '21', 'Маяк Маркет', 'Отгрузка заказа А-215', 'Отгрузите заказ А-215 до 21 ноября 2026 в 20:00.',
+      {deadline: '2026-11-21', deadline_time: '20:00'}],
     ['demo-main', '20', 'Городская доставка', 'Заказ А-208 прибыл в пункт выдачи', 'Заказ А-208 можно забрать до 25 ноября. Пункт выдачи открыт с 10:00 до 20:00.'],
     ['demo-main', '20', 'Кофейня «Угол»', 'Электронный чек за кофе', 'Капучино и круассан. Сумма чека 550 ₽. Оплата прошла 20 ноября в 09:14.'],
     ['demo-main', '20', 'Городские сервисы', 'Оплата проездного подтверждена', 'Проездной на декабрь оплачен. На турникете покажите код из приложения.'],
@@ -31,10 +34,11 @@ const demoApi = (() => {
     ['demo-main', '18', 'Мастерская', 'Вечер открытых дверей', 'В пятницу в 19:00 покажем, как устроена мастерская. Вход свободный.'],
     ['demo-work', '21', 'Рабочая группа', 'План встречи по интерфейсу', 'На встрече в 15:00 посмотрим прототип и соберём замечания по поиску.'],
     ['demo-work', '20', 'Студия', 'Отчёт за неделю', 'На этой неделе подготовили первую версию интерфейса и прототип календаря.'],
-    ['demo-work', '19', 'Координатор', 'Документы для согласования', 'В папке проекта лежат смета и расписание работ. Замечания ждём до понедельника.']
+    ['demo-work', '19', 'Координатор', 'Документы для согласования', 'Пожалуйста, проверьте смету и пришлите замечания.',
+      {deadline: null, deadline_time: null}]
   ];
-  const letters = entries.map(([mailbox, day, sender, subject, snippet], index) => ({
-    mailbox, id: 'example-' + (index + 1), sender, subject, snippet, date: '2026-11-' + day
+  const letters = entries.map(([mailbox, day, sender, subject, snippet, task], index) => ({
+    mailbox, id: 'example-' + (index + 1), sender, subject, snippet, date: '2026-11-' + day, task
   }));
 
   function search(visible, query, date) {
@@ -68,10 +72,21 @@ const demoApi = (() => {
     const mailbox = body?.mailbox ?? searchParams.get('mailbox');
     const date = body?.date ?? searchParams.get('date');
     const visible = letters.filter(letter => letter.mailbox === mailbox && letter.date <= date);
-    if (pathname === '/api/inbox') {
+    if (pathname === '/api/inbox' || pathname === '/api/actions') {
       const offset = Number(searchParams.get('offset'));
       const limit = Number(searchParams.get('limit'));
-      return {items: visible.slice(offset, offset + limit), total: visible.length, offset};
+      const actionsOnly = pathname === '/api/actions';
+      const items = actionsOnly
+        ? visible.filter(letter => letter.task).map(({task, ...letter}) => ({...letter, ...task, evidence: letter.snippet}))
+        : visible;
+      const result = {items: items.slice(offset, offset + limit), total: items.length, offset, limit};
+      if (actionsOnly) {
+        const tomorrow = new Date(Date.parse(date) + 86400000).toISOString().slice(0, 10);
+        result.urgent = items.filter(item => item.deadline && item.deadline >= date && item.deadline <= tomorrow)
+          .sort((a, b) => a.deadline.localeCompare(b.deadline) || (a.deadline_time || '23:59').localeCompare(b.deadline_time || '23:59'))
+          .slice(0, 3);
+      }
+      return result;
     }
     if (pathname.startsWith('/api/mail/')) {
       const letter = visible.find(item => item.id === decodeURIComponent(pathname.slice('/api/mail/'.length)));
