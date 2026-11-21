@@ -69,7 +69,7 @@ const visitorMail = (() => {
     if (!available || state.demo) throw new Error('Подключение почты недоступно.');
     const controller = new AbortController();
     controllers.add(controller);
-    const alarm = setTimeout(() => controller.abort(), timeout);
+    const alarm = setTimeout(() => controller.abort(new Error('Почтовый сервер не ответил вовремя.')), timeout);
     try {
       return await fetchJSON('/api/visitor/' + path, controller, body);
     } finally {

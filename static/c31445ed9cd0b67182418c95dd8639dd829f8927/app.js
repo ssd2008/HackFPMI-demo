@@ -3,10 +3,10 @@
 const byId = id => document.getElementById(id);
 const ui = {
   sidebar: byId('mailboxes'), mobile: byId('mobile-box-select'),
-  date: byId('asof-date'), dateLabel: byId('date-readable'),
+  dateFilter: byId('date-filter'), dateFrom: byId('date-from'), dateTo: byId('date-to'), dateLabel: byId('date-readable'),
   title: byId('page-heading'), listTitle: byId('list-title'),
   list: byId('list-box'), count: byId('mail-count'), order: byId('order-label'),
-  input: byId('search-input'), search: byId('search-button'), examples: byId('examples'),
+  input: byId('search-input'), search: byId('search-button'), searchHelp: byId('search-help'), examples: byId('examples'),
   answer: byId('answer-panel'), inbox: byId('back-inbox'), actions: byId('nav-actions'),
   urgent: byId('urgent-panel'), urgentItems: byId('urgent-items'),
   paging: byId('paging'), prev: byId('prev-page'), next: byId('next-page'),
@@ -20,7 +20,7 @@ const apiOrigin = apiConfig.hasAttribute('data-external') ? apiConfig.content : 
 const state = {
   demo: !apiOrigin || new URLSearchParams(location.search).get('demo') === '1',
   actionsOnly: false, boxes: [], mailbox: '', date: '', query: '', offset: 0, total: 0,
-  items: [], searchResults: [], lastAnswer: null, lastDates: new Map()
+  items: [], searchResults: [], lastAnswer: null, lastDates: new Map(), dateRanges: new Map()
 };
 const requests = new Map();
 const numberFormat = new Intl.NumberFormat('ru-RU');
@@ -105,7 +105,10 @@ async function fetchJSON(path, controller, body) {
   }
   let response;
   try { response = await fetch(url, options); }
-  catch { throw new Error('Не удалось связаться с почтовым сервером.'); }
+  catch (error) {
+    if (controller.signal.aborted) throw error;
+    throw new Error('Не удалось связаться с почтовым сервером.');
+  }
   if (!response.ok) {
     if (token && response.status === 401) visitorMail.end(token, 'Сессия завершена.');
     const data = await response.json().catch(() => null);
@@ -155,11 +158,40 @@ function populateMailboxes() {
   byId('box-total').textContent = numberFormat.format(state.boxes.length);
 }
 function setDate(value) {
-  state.date = value;
   state.lastDates.set(state.mailbox, value);
-  ui.date.value = value;
-  ui.dateLabel.textContent = dateText(value);
+  updateReferenceDate();
+}
+function dateRange() {
+  return state.dateRanges.get(state.mailbox) || {};
+}
+function updateReferenceDate() {
+  state.date = dateRange().date_to || state.lastDates.get(state.mailbox);
   personal.contextChanged();
+}
+function renderDateRange() {
+  const {date_from: from, date_to: to} = dateRange();
+  ui.dateFrom.value = from || '';
+  ui.dateTo.value = to || '';
+  ui.dateTo.setCustomValidity('');
+  ui.dateLabel.textContent = from && to ? dateText(from) + ' – ' + dateText(to)
+    : from ? 'С ' + dateText(from) : to ? 'До ' + dateText(to) : 'Период';
+}
+function applyDateRange(from, to) {
+  const previous = dateRange();
+  ui.dateFilter.open = false;
+  ui.dateFilter.querySelector('summary').focus();
+  const changed = (previous.date_from || '') !== from || (previous.date_to || '') !== to;
+  const range = {};
+  if (from) range.date_from = from;
+  if (to) range.date_to = to;
+  state.dateRanges.set(state.mailbox, range);
+  renderDateRange();
+  if (!changed) return;
+  updateReferenceDate();
+  ui.urgent.hidden = true;
+  closeReader();
+  if (state.query) showSearch(state.query);
+  else loadFolder(0);
 }
 function renderExamples(box) {
   const rows = (box.examples || []).filter(row => row.query && row.date);
@@ -168,7 +200,11 @@ function renderExamples(box) {
   if (!rows.length) return;
   rows.forEach(row => {
     const button = action('', 'example-button', () => {
+      state.dateRanges.delete(state.mailbox);
+      renderDateRange();
       setDate(row.date);
+      ui.searchHelp.open = false;
+      ui.input.focus();
       ui.input.value = row.query;
       showSearch(row.query);
     });
@@ -200,7 +236,9 @@ function openMailbox(id, initialDate) {
   showMailboxSelection(box);
   byId('nav-inbox').disabled = false;
   ui.actions.disabled = false;
-  ui.date.disabled = false;
+  ui.dateFilter.hidden = false;
+  ui.dateFilter.open = false;
+  renderDateRange();
   ui.input.disabled = false;
   ui.search.disabled = false;
   renderExamples(box);
@@ -308,7 +346,7 @@ async function loadFolder(offset) {
   setListLoading('Загружаем письма…');
   const endpoint = state.actionsOnly ? '/api/actions' : '/api/inbox';
   try {
-    const scope = {mailbox: state.mailbox, date: state.date, offset, limit: inboxPageSize};
+    const scope = {mailbox: state.mailbox, date: state.date, ...dateRange(), offset, limit: inboxPageSize};
     const marked = state.actionsOnly ? personal.markedIds(state.mailbox) : [];
     const data = marked.length
       ? await fetchJSON(endpoint, controller, {...scope, marked})
@@ -339,7 +377,7 @@ async function showSearch(query) {
   setListLoading('Ищем письма…');
   try {
     const data = await fetchJSON('/api/search', controller, {
-      mailbox: state.mailbox, date: state.date, query: text, limit: searchLimit
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: text, limit: searchLimit
     });
     if (!current('list', controller)) return;
     state.searchResults = data.items;
@@ -353,7 +391,7 @@ async function showSearch(query) {
   } catch (error) {
     if (!current('list', controller)) return;
     let detail = 'Проверьте подключение к локальному поиску.';
-    if (error.status === 400 || error.status === 422) detail = 'Проверьте текст запроса и выбранную дату.';
+    if (error.status === 400 || error.status === 422) detail = 'Проверьте текст запроса и выбранный период.';
     showListError('Поиск не завершился', detail, () => showSearch(text));
   }
 }
@@ -551,7 +589,7 @@ async function generateAnswer() {
   announce('Готовим ответ по найденным письмам.');
   try {
     const data = await fetchJSON('/api/answer', controller, {
-      mailbox: state.mailbox, date: state.date, query: state.query
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: state.query
     });
     if (!current('answer', controller)) return;
     ui.answer.setAttribute('aria-busy', 'false');
@@ -653,14 +691,25 @@ ui.actions.addEventListener('click', () => {
   window.scrollTo(0, 0);
 });
 ui.mobile.addEventListener('change', () => openMailbox(ui.mobile.value));
-ui.date.addEventListener('change', () => {
-  if (!ui.date.value || !ui.date.validity.valid) { ui.date.value = state.date; return; }
-  if (ui.date.value === state.date) return;
-  setDate(ui.date.value);
-  ui.urgent.hidden = true;
-  closeReader();
-  if (state.query) showSearch(state.query);
-  else loadFolder(0);
+byId('date-filter-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const from = ui.dateFrom.value, to = ui.dateTo.value;
+  if (ui.dateFrom.valueAsNumber > ui.dateTo.valueAsNumber) {
+    ui.dateTo.setCustomValidity('Дата «До» должна быть не раньше даты «От».');
+    ui.dateTo.reportValidity();
+    return;
+  }
+  applyDateRange(from, to);
+});
+byId('date-filter-form').addEventListener('input', () => ui.dateTo.setCustomValidity(''));
+byId('date-clear').addEventListener('click', () => applyDateRange('', ''));
+ui.dateFilter.addEventListener('toggle', () => {
+  if (ui.dateFilter.open) renderDateRange();
+});
+document.addEventListener('click', event => {
+  for (const panel of [ui.searchHelp, ui.dateFilter]) {
+    if (panel.open && !panel.contains(event.target)) panel.open = false;
+  }
 });
 byId('reader-close').addEventListener('click', closeReader);
 ui.reader.addEventListener('close', () => { if (!ui.reader.open) cancel('mail'); });
@@ -673,6 +722,15 @@ ui.reader.addEventListener('click', event => {
 ui.prev.addEventListener('click', () => changePage(-1));
 ui.next.addEventListener('click', () => changePage(1));
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    const panel = event.target.closest('.search-help[open], .date-filter[open]');
+    if (panel) {
+      panel.open = false;
+      panel.querySelector('summary').focus();
+      event.preventDefault();
+    }
+    return;
+  }
   if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || document.querySelector('dialog[open]') || ui.input.disabled) return;
   if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
   event.preventDefault();
@@ -694,14 +752,15 @@ function resetMailboxView() {
   state.offset = 0;
   state.total = 0;
   state.lastDates.clear();
+  state.dateRanges.clear();
   ui.input.value = '';
   ui.input.disabled = true;
   ui.search.disabled = true;
   ui.mobile.disabled = true;
   ui.mobile.replaceChildren(node('option', '', 'Почтовый ящик'));
-  ui.date.disabled = true;
-  ui.date.value = '';
-  ui.dateLabel.textContent = 'Дата запроса';
+  ui.dateFilter.hidden = true;
+  ui.dateFilter.open = false;
+  renderDateRange();
   ui.examples.hidden = true;
   ui.examples.replaceChildren();
   ui.urgentItems.replaceChildren();
@@ -713,8 +772,8 @@ function resetMailboxView() {
   ui.actions.disabled = true;
   byId('demo-label').hidden = !state.demo;
   byId('search-description').textContent = state.demo
-    ? 'Поиск по словам в вымышленных письмах.'
-    : 'Опишите, что помните о письме, своими словами.';
+    ? 'Ищите по словам в вымышленных письмах. Можно добавить «сегодня» или «вчера».'
+    : 'Ищите по теме, отправителю и содержимому. Можно описать письмо своими словами или указать время, например «чек за вчера».';
   byId('leave-demo').hidden = !state.demo || !apiOrigin;
   setMode();
   personal.resetPrivate();
