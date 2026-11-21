@@ -89,15 +89,27 @@ function current(kind, controller) {
 }
 async function fetchJSON(path, controller, body) {
   if (state.demo) return demoApi(path, body);
-  const options = {signal: controller.signal, cache: 'no-store'};
+  const url = new URL(path, apiOrigin);
+  if (url.origin !== new URL(apiOrigin).origin || !url.pathname.startsWith('/api/')) {
+    throw new Error('Некорректный адрес почтового сервера.');
+  }
+  const token = url.pathname === '/api/visitor/session' ? '' : visitorMail.token();
+  const headers = {};
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const options = {signal: controller.signal, cache: 'no-store', headers, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer'};
   if (body !== undefined) {
     options.method = 'POST';
-    options.headers = {'Content-Type': 'application/json'};
+    headers['Content-Type'] = 'application/json';
+    if (url.pathname.startsWith('/api/visitor/') || token) headers['X-Mailsearch-Visitor'] = '1';
     options.body = JSON.stringify(body);
   }
-  const response = await fetch(new URL(path, apiOrigin), options);
+  let response;
+  try { response = await fetch(url, options); }
+  catch { throw new Error('Не удалось связаться с почтовым сервером.'); }
   if (!response.ok) {
-    const error = new Error('HTTP ' + response.status);
+    if (token && response.status === 401) visitorMail.end(token, 'Сессия завершена.');
+    const data = await response.json().catch(() => null);
+    const error = new Error(typeof data?.detail === 'string' ? data.detail : 'Почтовый сервер вернул ошибку ' + response.status + '.');
     error.status = response.status;
     throw error;
   }
@@ -129,7 +141,7 @@ function populateMailboxes() {
   state.boxes.forEach(box => {
     const button = action('', 'box-button', () => openMailbox(box.id));
     button.dataset.id = box.id;
-    button.title = box.name + ' · ' + box.id + ' · ' + mailCount(box.count);
+    button.title = box.name + (box.label ? '' : ' · ' + box.id) + ' · ' + mailCount(box.count);
     button.setAttribute('aria-label', box.name + ', ' + mailCount(box.count));
     button.append(icon('box'), node('span', 'box-name', box.name), node('span', 'box-count', numberFormat.format(box.count)));
     sidebar.append(button);
@@ -166,22 +178,26 @@ function renderExamples(box) {
     ui.examples.append(button);
   });
 }
+function showMailboxSelection(box) {
+  for (const button of ui.sidebar.children) {
+    if (button.dataset.id === box.id) button.setAttribute('aria-current', 'true');
+    else button.removeAttribute('aria-current');
+  }
+  ui.mobile.value = box.id;
+  const context = byId('page-context');
+  const detail = state.demo ? 'вымышленные письма' : box.label ? mailCount(box.count) : box.id;
+  context.textContent = box.name + ' · ' + detail;
+  context.hidden = false;
+}
 function openMailbox(id, initialDate) {
   const box = getBox(id);
   if (!box) return;
   closeReader();
   clearAnswer();
   state.mailbox = id;
-  const date = initialDate || state.lastDates.get(id) || box.latest_date || state.date;
-  setDate(date);
-  for (const button of ui.sidebar.children) {
-    if (button.dataset.id === id) button.setAttribute('aria-current', 'true');
-    else button.removeAttribute('aria-current');
-  }
-  ui.mobile.value = id;
-  const context = byId('page-context');
-  context.textContent = state.demo ? box.name + ' · вымышленные письма' : box.name + ' · ' + id;
-  context.hidden = false;
+  const defaultDate = box.kind === 'live' ? new Intl.DateTimeFormat('sv-SE', {year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date()) : box.latest_date;
+  setDate(initialDate || state.lastDates.get(id) || defaultDate || state.date);
+  showMailboxSelection(box);
   byId('nav-inbox').disabled = false;
   ui.actions.disabled = false;
   ui.date.disabled = false;
@@ -191,26 +207,43 @@ function openMailbox(id, initialDate) {
   showFolder(state.actionsOnly);
   window.scrollTo(0, 0);
 }
-async function loadMailboxes() {
+async function loadMailboxes({preserve = false} = {}) {
   const controller = start('boxes');
-  setListLoading('Открываем почтовый архив…');
+  if (!preserve) setListLoading('Открываем почтовый архив…');
   try {
     const data = await fetchJSON('/api/mailboxes', controller);
-    if (!current('boxes', controller)) return;
-    const sorted = [...data.mailboxes].sort((a, b) => a.id.localeCompare(b.id));
-    state.boxes = sorted.map((box, index) => ({
-      ...box, name: state.demo ? box.name : 'Ящик ' + String(index + 1).padStart(2, '0')
+    if (!current('boxes', controller)) return false;
+    const active = getBox(state.mailbox);
+    const visitor = !state.demo && data.visitor_mail === true;
+    if (data.visitor_mail === false && visitorMail.token()) {
+      visitorMail.end(visitorMail.token(), 'Подключение личной почты отключено.');
+      return false;
+    }
+    const visible = data.mailboxes.filter(box => box.kind !== 'archive' && (box.kind !== 'live' || (visitor && visitorMail.token())));
+    const sorted = visible.sort((a, b) => Number(b.kind === 'live') - Number(a.kind === 'live') || a.id.localeCompare(b.id));
+    let anonymous = 0;
+    state.boxes = sorted.map(box => ({
+      ...box, name: state.demo ? box.name : box.label || 'Ящик ' + String(++anonymous).padStart(2, '0')
     }));
     populateMailboxes();
+    visitorMail.setAvailable(visitor);
     if (!sorted.length) {
+      state.mailbox = '';
       ui.list.setAttribute('aria-busy', 'false');
-      ui.list.replaceChildren(messageState('Ящиков пока нет', 'Корпус писем пуст.', 'archive'));
-      return;
+      ui.list.replaceChildren(messageState('Ящиков пока нет', visitor ? 'Подключите почтовый аккаунт.' : 'Корпус писем пуст.', 'archive'));
+      return true;
     }
-    const chosen = getBox(data.default_mailbox) || state.boxes[0];
-    openMailbox(chosen.id, data.default_date || chosen.latest_date);
+    const retained = preserve && getBox(state.mailbox);
+    if (retained) {
+      showMailboxSelection(retained);
+      if (active?.count !== retained.count && !state.query) loadFolder(state.offset);
+    } else {
+      const chosen = getBox(data.default_mailbox) || state.boxes[0];
+      openMailbox(chosen.id, data.default_date || chosen.latest_date);
+    }
+    return true;
   } catch (error) {
-    if (!current('boxes', controller)) return;
+    if (!current('boxes', controller) || preserve) return false;
     const detail = apiOrigin === location.origin
       ? 'Проверьте, что локальный сервер запущен.'
       : 'Сервер демо недоступен. Попробуйте ещё раз.';
@@ -218,6 +251,7 @@ async function loadMailboxes() {
     if (!state.demo) {
       ui.list.firstElementChild.append(action('Открыть демо', 'text-action', () => setDemoMode(true)));
     }
+    return false;
   }
 }
 function setMode() {
@@ -560,6 +594,7 @@ function renderMail(mail) {
   const readable = cleanBody(original);
   const body = node('div', 'message-body', readable);
   ui.readerContent.replaceChildren(badge, title, meta, personal.mailControls(mail));
+  if (mail.truncated) ui.readerContent.append(node('p', 'account-caption', 'Длинное письмо загружено частично. Ниже показано его начало.'));
   if (original !== readable) {
     const toggle = action('Показать исходный текст', 'body-toggle', () => {
       const showOriginal = toggle.getAttribute('aria-pressed') === 'false';
@@ -638,42 +673,61 @@ ui.reader.addEventListener('click', event => {
 ui.prev.addEventListener('click', () => changePage(-1));
 ui.next.addEventListener('click', () => changePage(1));
 document.addEventListener('keydown', event => {
-  if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || ui.reader.open || ui.input.disabled) return;
+  if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || document.querySelector('dialog[open]') || ui.input.disabled) return;
   if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
   event.preventDefault();
   ui.input.focus();
 });
-function setDemoMode(enabled) {
+function resetMailboxView() {
+  for (const kind of requests.keys()) cancel(kind);
   closeReader();
+  ui.readerContent.replaceChildren();
+  ui.readerContent.removeAttribute('aria-busy');
   clearAnswer();
-  cancel('list');
-  state.demo = enabled;
   state.actionsOnly = false;
+  state.boxes = [];
   state.mailbox = '';
   state.date = '';
   state.query = '';
+  state.items = [];
+  state.searchResults = [];
+  state.offset = 0;
+  state.total = 0;
+  state.lastDates.clear();
   ui.input.value = '';
   ui.input.disabled = true;
   ui.search.disabled = true;
   ui.mobile.disabled = true;
   ui.mobile.replaceChildren(node('option', '', 'Почтовый ящик'));
   ui.date.disabled = true;
+  ui.date.value = '';
   ui.dateLabel.textContent = 'Дата запроса';
   ui.examples.hidden = true;
+  ui.examples.replaceChildren();
+  ui.urgentItems.replaceChildren();
   ui.sidebar.replaceChildren();
   byId('box-total').textContent = '';
   byId('page-context').hidden = true;
+  byId('page-context').textContent = '';
   byId('nav-inbox').disabled = true;
   ui.actions.disabled = true;
-  byId('demo-label').hidden = !enabled;
-  byId('search-description').textContent = enabled
+  byId('demo-label').hidden = !state.demo;
+  byId('search-description').textContent = state.demo
     ? 'Поиск по словам в вымышленных письмах.'
     : 'Опишите, что помните о письме, своими словами.';
-  byId('leave-demo').hidden = !enabled || !apiOrigin;
+  byId('leave-demo').hidden = !state.demo || !apiOrigin;
   setMode();
+  personal.resetPrivate();
   personal.contextChanged();
   loadMailboxes();
 }
+function setDemoMode(enabled) {
+  visitorMail.setAvailable(false);
+  state.demo = enabled;
+  if (!enabled) visitorMail.restore();
+  resetMailboxView();
+}
 byId('leave-demo').addEventListener('click', () => setDemoMode(false));
 personal.init();
+visitorMail.init();
 setDemoMode(state.demo);

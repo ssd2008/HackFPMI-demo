@@ -4,20 +4,28 @@ const personal = (() => {
   const assistantId = 'assistant-panel';
   let lastWatchPoll = 0;
   let checking = false;
+  const blank = () => ({marks: {}, reminders: {}, watches: []});
+  let privateData = blank();
+
+  function privateContext() {
+    return Boolean(visitorMail.token()) || getBox(state.mailbox)?.kind === 'live';
+  }
 
   function storageKey() {
     return 'ayai-mail:personal:' + (state.demo ? 'demo' : apiOrigin);
   }
 
   function read() {
+    if (privateContext()) return privateData;
     try {
-      return JSON.parse(localStorage.getItem(storageKey())) || {marks: {}, reminders: {}, watches: []};
+      return JSON.parse(localStorage.getItem(storageKey())) || blank();
     } catch {
-      return {marks: {}, reminders: {}, watches: []};
+      return blank();
     }
   }
 
   function save(data) {
+    if (privateContext()) { privateData = data; return true; }
     try {
       localStorage.setItem(storageKey(), JSON.stringify(data));
       return true;
@@ -321,6 +329,15 @@ const personal = (() => {
     pollWatches(true);
   }
 
+  function resetPrivate() {
+    privateData = blank();
+    lastWatchPoll = 0;
+    byId('assistant-query').value = '';
+    byId('assistant-results').replaceChildren();
+    byId('watch-items').replaceChildren();
+    byId('notifications').replaceChildren();
+  }
+
   function init() {
     byId('assistant-open').addEventListener('click', () => toggleAssistant(byId(assistantId).hidden));
     byId('assistant-close').addEventListener('click', () => toggleAssistant(false));
@@ -340,5 +357,5 @@ const personal = (() => {
     setInterval(tick, 5000);
   }
 
-  return {init, markedIds, contextChanged, mailControls};
+  return {init, markedIds, contextChanged, resetPrivate, mailControls, toast};
 })();
