@@ -14,7 +14,8 @@ const ui = {
 const inboxPageSize = 25;
 const searchPageSize = 15;
 const searchLimit = 30;
-const apiOrigin = document.querySelector('meta[name="mailsearch-api-origin"]').content || location.origin;
+const apiConfig = document.querySelector('meta[name="mailsearch-api-origin"]');
+const apiOrigin = apiConfig.hasAttribute('data-external') ? apiConfig.content : location.origin;
 const state = {
   boxes: [], mailbox: '', date: '', query: '', offset: 0, total: 0,
   items: [], searchResults: [], lastAnswer: null, lastDates: new Map()
@@ -570,4 +571,9 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   ui.input.focus();
 });
-loadMailboxes();
+if (apiOrigin) {
+  loadMailboxes();
+} else {
+  ui.list.setAttribute('aria-busy', 'false');
+  ui.list.replaceChildren(messageState('Сервер демо ещё не подключён', '', 'archive'));
+}
