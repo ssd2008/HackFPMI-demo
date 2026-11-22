@@ -238,6 +238,10 @@ async function loadMailboxes({preserve = false} = {}) {
     const data = await fetchJSON('/api/mailboxes', controller);
     if (!current('boxes', controller)) return false;
     const active = getBox(state.mailbox);
+    const files = byId('include-attachments');
+    files.disabled = data.attachment_search !== true;
+    byId('attachment-status').hidden = !files.disabled;
+    if (files.disabled) files.checked = false;
     const visitor = !state.demo && data.visitor_mail === true;
     if (data.visitor_mail === false && visitorMail.token()) {
       visitorMail.end(visitorMail.token(), 'Подключение личной почты отключено.');
@@ -366,7 +370,7 @@ async function showSearch(query) {
   setListLoading('Ищем письма…');
   try {
     const data = await fetchJSON('/api/search', controller, {
-      mailbox: state.mailbox, date: state.date, ...dateRange(), query: text, limit: searchLimit
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: text, limit: searchLimit, ...fileOption()
     });
     if (!current('list', controller)) return;
     state.searchResults = data.items;
@@ -375,6 +379,7 @@ async function showSearch(query) {
     byId('sort-text').textContent = Number.isFinite(latency)
       ? 'По релевантности · ' + numberFormat.format(Math.round(latency)) + ' мс'
       : 'По релевантности';
+    if (data.partial_attachment_search) byId('sort-text').textContent += ' · Вложения проверены частично';
     renderSearchPage(0);
     if (state.total) renderAnswerPrompt();
   } catch (error) {
@@ -578,7 +583,7 @@ async function generateAnswer() {
   announce('Готовим ответ по найденным письмам.');
   try {
     const data = await fetchJSON('/api/answer', controller, {
-      mailbox: state.mailbox, date: state.date, ...dateRange(), query: state.query
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: state.query, ...fileOption()
     });
     if (!current('answer', controller)) return;
     ui.answer.setAttribute('aria-busy', 'false');
@@ -634,6 +639,9 @@ function renderMail(mail) {
     ui.readerContent.append(toggle);
   }
   ui.readerContent.append(body);
+  for (const file of mail.attachments || []) {
+    ui.readerContent.append(node('strong', '', file.filename), node('p', '', file.description || 'Текст недоступен'));
+  }
   ui.readerContent.scrollTop = 0;
 }
 async function openMail(id, subject) {
@@ -645,7 +653,7 @@ async function openMail(id, subject) {
   ui.readerContent.setAttribute('aria-busy', 'true');
   try {
     const mail = await fetchJSON('/api/mail/' + encodeURIComponent(id) + params({
-      mailbox: state.mailbox, date: state.date
+      mailbox: state.mailbox, date: state.date, ...fileOption()
     }), controller);
     if (!current('mail', controller) || !ui.reader.open) return;
     ui.readerContent.setAttribute('aria-busy', 'false');
@@ -660,6 +668,13 @@ async function openMail(id, subject) {
   }
 }
 
+function fileOption() {
+  const checkbox = byId('include-attachments');
+  return checkbox.checked && !checkbox.disabled ? {include_attachments: true} : {};
+}
+byId('include-attachments').addEventListener('change', () => {
+  if (state.query) showSearch(state.query);
+});
 byId('search-form').addEventListener('submit', event => {
   event.preventDefault();
   if (ui.input.disabled) return;
@@ -727,6 +742,8 @@ document.addEventListener('keydown', event => {
   ui.input.focus();
 });
 function resetMailboxView() {
+  byId('include-attachments').disabled = true;
+  byId('attachment-status').hidden = true;
   for (const kind of requests.keys()) cancel(kind);
   closeReader();
   ui.readerContent.replaceChildren();
