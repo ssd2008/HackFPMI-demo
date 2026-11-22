@@ -134,7 +134,7 @@ const visitorMail = (() => {
   }
   function schedule() {
     clearTimeout(poll);
-    if (available && session && !document.hidden && !busy && !refreshing && !syncing.size) {
+    if (available && session && (list.length || !loaded) && !document.hidden && !busy && !refreshing && !syncing.size) {
       poll = setTimeout(load, list.some(a => a.status === 'syncing' || a.pending) ? 4000 : 30000);
     }
   }
@@ -192,6 +192,7 @@ const visitorMail = (() => {
     const password = el('account-password').value;
     el('account-password').value = '';
     const start = pauseReads();
+    let connected = false;
     busy = true;
     render(); feedback('Подключаем ваш ящик…');
     try {
@@ -202,23 +203,29 @@ const visitorMail = (() => {
           throw new Error('Сервер не создал сессию. Повторите подключение.');
         }
         session = {token: data.token, expires: Date.now() + data.expires_in * 1000};
+        loaded = true;
+        error = '';
         try { sessionStorage.setItem(storageKey(), JSON.stringify(session)); } catch { /* The session still works in this page. */ }
         timer();
-        resetMailboxView();
       }
       const {account} = await request('accounts', {provider, address, password}, 90000);
       if (start !== version) return;
       if (!account?.id) throw new Error('Сервер не вернул подключённый ящик.');
+      connected = true;
       list = [...list.filter(a => a.id !== account.id), account];
       loaded = true; error = '';
       el('account-add').open = false;
       el('account-address').value = '';
       feedback('Ящик подключён.');
-      await loadMailboxes({preserve: true});
     } catch (err) {
       if (start === version) feedback(err.message, true);
     } finally {
-      if (start === version) { busy = false; render(); load(); }
+      if (start === version) {
+        busy = false;
+        render();
+        if (connected) load();
+        else schedule();
+      }
     }
   }
   async function syncAccount(id) {
