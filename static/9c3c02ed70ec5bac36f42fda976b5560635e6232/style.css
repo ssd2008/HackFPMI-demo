@@ -722,9 +722,7 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
 .account-caption a { color: var(--accent-strong); text-underline-offset: .15em; }
 #visitor-accounts-list { display: grid; gap: 8px; }
 .account-card { display: grid; gap: 5px; padding: 13px; border: 1px solid var(--line); border-radius: 11px; }
-.account-title { display: flex; align-items: baseline; justify-content: space-between; gap: 5px 12px; flex-wrap: wrap; }
-.account-title strong { font-size: .95rem; overflow-wrap: anywhere; }
-.account-provider { color: var(--muted); font-size: .78rem; }
+.account-title { font-size: .95rem; overflow-wrap: anywhere; }
 .account-phase { color: var(--accent-strong); font-weight: 650; }
 .account-pending { color: #805b20; }
 .account-sync { justify-self: start; min-height: 33px; margin-top: 3px; padding: 5px 10px; font-size: .8rem; }
@@ -738,7 +736,7 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
 .account-add[open] summary .icon { transform: rotate(45deg); }
 #visitor-account-form { display: grid; gap: 10px; padding: 3px 0 1px; }
 #visitor-account-form label { display: grid; gap: 4px; font-size: .83rem; color: var(--muted); }
-#visitor-account-form input, #visitor-account-form select {
+#visitor-account-form input {
   width: 100%; min-width: 0; min-height: 41px; padding: 7px 9px;
   border: 1px solid #cbd4df; border-radius: 8px; background: var(--paper); font: inherit; color: var(--text);
 }
@@ -755,15 +753,6 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
 .visitor-open .icon { width: 17px; height: 17px; }
 .visitor-dialog { width: min(560px, calc(100% - 28px)); }
 .account-access { font-size: .92rem; line-height: 1.5; }
-.visitor-providers { margin: 0; padding: 0; border: 0; min-width: 0; }
-.visitor-providers legend { padding: 0 0 4px; color: var(--muted); font-size: .83rem; }
-.visitor-provider-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-#visitor-account-form .visitor-provider-options label {
-  display: flex; align-items: center; gap: 8px; min-height: 39px; padding: 6px 10px; border: 1px solid var(--line);
-  border-radius: 8px; color: var(--text); font-size: .875rem; cursor: pointer;
-}
-#visitor-account-form .visitor-provider-options label:has(:checked) { border-color: #abc9ec; background: var(--accent-soft); color: var(--accent-strong); }
-#visitor-account-form .visitor-provider-options input { width: 15px; min-height: 0; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 .visitor-account-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .visitor-account-actions .text-action { min-height: 32px; padding: 4px 0; }
 .logout-button { justify-self: start; }
@@ -772,5 +761,5 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
   .visitor-dialog { width: calc(100% - 16px); }
   .mail-dialog-head { padding: 9px 13px; }
   .accounts-content { padding: 12px 13px; }
-  #visitor-account-form input, #visitor-account-form select { font-size: 16px; }
+  #visitor-account-form input { font-size: 16px; }
 }
