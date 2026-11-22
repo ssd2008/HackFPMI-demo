@@ -1,7 +1,6 @@
 'use strict';
 
 const personal = (() => {
-  const assistantId = 'assistant-panel';
   let lastWatchPoll = 0;
   let checking = false;
   const blank = () => ({marks: {}, reminders: {}, watches: []});
@@ -79,7 +78,10 @@ const personal = (() => {
   }
 
   function gotoSource(box, cutoff, mail) {
-    if (box !== state.mailbox || cutoff > state.date) openMailbox(box, cutoff);
+    if (box !== state.mailbox || cutoff > state.date) {
+      if (state.dateRanges.get(box)?.date_to < cutoff) state.dateRanges.delete(box);
+      openMailbox(box, cutoff);
+    }
     openMail(mail.id, mail.subject);
   }
 
@@ -102,7 +104,7 @@ const personal = (() => {
         const cutoff = letters.reduce((latest, letter) => letter.date > latest ? letter.date : latest, first.date);
         toast('Письма требуют действия', (getBox(box)?.name || 'Почтовый ящик') + ' · ' + mailCount(letters.length), () => {
           if (state.mailbox !== box || state.date < cutoff) openMailbox(box, cutoff);
-          showFolder(true);
+          showFolder('actions');
         });
       }
     }
@@ -143,7 +145,7 @@ const personal = (() => {
       }
       if (!save(data)) return;
       update();
-      if (state.actionsOnly) loadFolder(0);
+      if (state.folder === 'actions') loadFolder(0);
     });
     const label = node('span', '');
     mark.append(icon('priority'), label);
@@ -200,75 +202,84 @@ const personal = (() => {
     return group;
   }
 
-  function toggleAssistant(open) {
-    byId(assistantId).hidden = !open;
-    byId('assistant-open').setAttribute('aria-expanded', String(open));
-    if (open) {
-      renderWatches();
-      byId('assistant-query').focus();
-    } else {
-      byId('assistant-open').focus();
-    }
+  function watchStatus(message, error = false) {
+    const status = byId('watch-status');
+    status.hidden = !message;
+    status.textContent = message;
+    status.classList.toggle('is-error', error);
   }
 
   function renderWatches() {
+    const list = byId('watch-items');
     const watches = read().watches;
-    byId('watch-panel').hidden = !watches.length;
-    byId('watch-items').replaceChildren(...watches.map(watch => {
-      const row = node('div', 'watch-item');
-      const text = node('div');
-      text.append(node('strong', '', watch.query), node('p', '', (getBox(watch.mailbox)?.name || 'Ящик') +
-        (watch.match ? ' · письмо найдено' : ' · ждём письмо')));
+    if (!watches.length) {
+      list.replaceChildren(messageState('Вы пока не отслеживаете письма', '', 'clock'));
+      return;
+    }
+    list.replaceChildren(...watches.slice().reverse().map(watch => {
+      const row = node('article', 'watch-item');
+      const marker = node('span', 'watch-marker');
+      marker.append(icon(watch.match ? 'checklist' : 'clock'));
+      const text = node('div', 'watch-item-text');
+      const label = node('span', 'watch-state', watch.match ? 'Письмо найдено' : 'Ждём письмо');
+      if (watch.match) label.classList.add('is-found');
+      text.append(node('h3', '', watch.query),
+        node('p', '', getBox(watch.mailbox)?.name || 'Почтовый ящик'), label);
+      const controls = node('div', 'watch-item-actions');
+      if (watch.match) {
+        controls.append(action('Открыть письмо', 'secondary', () => gotoSource(watch.mailbox, watch.match.date, watch.match)));
+      }
       const remove = action(watch.match ? 'Убрать' : 'Отменить', 'text-action', () => {
         const data = read();
         data.watches = data.watches.filter(item => item.id !== watch.id);
-        if (save(data)) renderWatches();
+        if (!save(data)) return;
+        renderWatches();
+        byId('watch-query').focus();
+        watchStatus(watch.match ? 'Письмо убрано из списка.' : 'Отслеживание отменено.');
       });
-      row.append(text);
-      if (watch.match) row.append(action('Открыть', 'text-action', () => gotoSource(watch.mailbox, watch.match.date, watch.match)));
-      row.append(remove);
+      controls.append(remove);
+      row.append(marker, text, controls);
       return row;
     }));
   }
 
-  async function ask() {
-    const query = byId('assistant-query').value.trim();
-    if (!query || !state.mailbox || !state.date) return;
-    const results = byId('assistant-results');
-    const context = {mailbox: state.mailbox, date: state.date, query};
-    const controller = start('assistant');
-    results.replaceChildren(spinner('Проверяем письма…'));
+  async function createWatch() {
+    const input = byId('watch-query');
+    const submit = byId('watch-submit');
+    const query = input.value.trim();
+    if (!query || !state.mailbox || !state.date || submit.disabled) return;
+    const box = getBox(state.mailbox);
+    const date = box?.kind === 'live' ? new Date().toLocaleDateString('sv-SE')
+      : box?.latest_date > state.date ? box.latest_date : state.date;
+    const context = {mailbox: state.mailbox, date, query};
+    const controller = start('watch-create');
+    submit.disabled = true;
+    watchStatus('Сохраняем ожидание…');
     try {
-      const reply = await fetchJSON('/api/assistant', controller, context);
-      if (!current('assistant', controller)) return;
-      if (reply.kind === 'watch') {
-        const baseline = await fetchJSON('/api/assistant/watch', controller, {...context, after: context.date});
-        if (!current('assistant', controller)) return;
-        const data = read();
-        if (!data.watches.some(watch => !watch.match && watch.mailbox === context.mailbox && watch.query === query)) {
-          data.watches.push({id: crypto.randomUUID(), ...context,
-            latest: getBox(context.mailbox)?.latest_date, seen: baseline.matched_ids});
-          if (!save(data)) {
-            results.replaceChildren(node('p', '', 'Не удалось сохранить отслеживание.'));
-            return;
-          }
-        }
-        results.replaceChildren(node('p', '', 'Слежу за новыми письмами по этому запросу.'));
-        renderWatches();
+      const baseline = await fetchJSON('/api/assistant/watch', controller, {...context, after: date});
+      if (!current('watch-create', controller)) return;
+      if (baseline.query_valid === false) {
+        watchStatus('Добавьте тему письма, имя отправителя или другое ключевое слово.', true);
         return;
       }
-      const title = reply.message || (reply.items.length
-        ? (reply.kind === 'events' ? 'Приглашения на ближайшие 30 дней' : 'Подходящие письма')
-        : (reply.kind === 'events' ? 'Приглашений с датой на ближайшие 30 дней нет.' : 'Подходящие письма не найдены.'));
-      results.replaceChildren(node('p', 'assistant-reply', title), ...reply.items.map(mail => {
-        const card = action('', 'assistant-source', () => gotoSource(context.mailbox, context.date, mail));
-        card.append(node('strong', '', mail.subject || 'Без темы'));
-        if (mail.event_date) card.append(node('span', 'urgent-date', dateText(mail.event_date) + (mail.event_time ? ', ' + mail.event_time : '')));
-        card.append(node('span', '', mail.evidence || mail.snippet || 'Открыть письмо'));
-        return card;
-      }));
+      const data = read();
+      if (data.watches.some(watch => !watch.match && watch.mailbox === context.mailbox &&
+          watch.query.toLowerCase() === query.toLowerCase())) {
+        watchStatus('Такое ожидание уже есть.');
+        return;
+      }
+      data.watches.push({id: crypto.randomUUID(), ...context, seen: baseline.matched_ids});
+      if (!save(data)) {
+        watchStatus('Не удалось сохранить ожидание.', true);
+        return;
+      }
+      if (input.value.trim() === query) input.value = '';
+      watchStatus('Теперь ждём это письмо.');
+      renderWatches();
     } catch {
-      if (current('assistant', controller)) results.replaceChildren(node('p', '', 'Не удалось проверить письма. Попробуйте ещё раз.'));
+      if (current('watch-create', controller)) watchStatus('Не удалось сохранить ожидание. Попробуйте ещё раз.', true);
+    } finally {
+      if (current('watch-create', controller)) submit.disabled = false;
     }
   }
 
@@ -279,21 +290,26 @@ const personal = (() => {
     checking = true;
     lastWatchPoll = Date.now();
     const storage = storageKey();
-    const controller = start('assistant-watch');
+    const visitor = visitorMail.token();
+    const controller = start('watch-poll');
+    const sameContext = () => current('watch-poll', controller) && storage === storageKey() && visitor === visitorMail.token();
     try {
       const {mailboxes} = await fetchJSON('/api/mailboxes', controller);
       for (const watch of pending) {
-        if (!current('assistant-watch', controller) || storage !== storageKey()) return;
-        const snapshot = state.lastDates.get(watch.mailbox) || watch.date;
+        if (!sameContext()) return;
         const box = mailboxes.find(box => box.id === watch.mailbox);
         if (!box) continue;
-        const latest = box.latest_date;
-        const cutoff = latest && latest > (watch.latest || watch.date) && latest > snapshot ? latest : snapshot;
-        if (cutoff < watch.date) continue;
-        const result = await fetchJSON('/api/assistant/watch', controller, {
-          mailbox: watch.mailbox, date: cutoff, after: watch.date, seen: watch.seen, query: watch.query
-        });
-        if (!current('assistant-watch', controller) || storage !== storageKey()) return;
+        const cutoff = [watch.date, box.latest_date, state.lastDates.get(watch.mailbox),
+          state.mailbox === watch.mailbox && state.date].filter(Boolean).sort().at(-1);
+        let result;
+        try {
+          result = await fetchJSON('/api/assistant/watch', controller, {
+            mailbox: watch.mailbox, date: cutoff, after: watch.date, seen: watch.seen, query: watch.query
+          });
+        } catch {
+          continue;
+        }
+        if (!sameContext()) return;
         if (!result.items.length) continue;
         const data = read();
         const active = data.watches.find(item => item.id === watch.id);
@@ -310,18 +326,14 @@ const personal = (() => {
   }
 
   function contextChanged() {
-    cancel('assistant');
+    cancel('watch-create');
     cancel('reminder-candidates');
-    const open = byId('assistant-open');
-    open.disabled = !state.mailbox;
-    byId('assistant-box').textContent = getBox(state.mailbox)?.name || '';
-    byId('assistant-results').replaceChildren();
+    byId('watch-submit').disabled = !state.mailbox;
+    watchStatus('');
     renderWatches();
     if (!state.mailbox) {
-      byId(assistantId).hidden = true;
-      open.setAttribute('aria-expanded', 'false');
       byId('notifications').replaceChildren();
-      cancel('assistant-watch');
+      cancel('watch-poll');
       return;
     }
     syncCandidates();
@@ -332,20 +344,18 @@ const personal = (() => {
   function resetPrivate() {
     privateData = blank();
     lastWatchPoll = 0;
-    byId('assistant-query').value = '';
-    byId('assistant-results').replaceChildren();
+    byId('watch-query').value = '';
+    watchStatus('');
     byId('watch-items').replaceChildren();
     byId('notifications').replaceChildren();
   }
 
   function init() {
-    byId('assistant-open').addEventListener('click', () => toggleAssistant(byId(assistantId).hidden));
-    byId('assistant-close').addEventListener('click', () => toggleAssistant(false));
-    byId(assistantId).addEventListener('keydown', event => { if (event.key === 'Escape') toggleAssistant(false); });
-    byId('assistant-form').addEventListener('submit', event => { event.preventDefault(); ask(); });
-    for (const example of byId(assistantId).querySelectorAll('.assistant-examples button')) {
-      example.addEventListener('click', () => { byId('assistant-query').value = example.textContent; ask(); });
-    }
+    byId('watch-form').addEventListener('submit', event => { event.preventDefault(); createWatch(); });
+    byId('watch-query').addEventListener('input', () => watchStatus(''));
+    window.addEventListener('storage', event => {
+      if (!privateContext() && event.key === storageKey()) renderWatches();
+    });
     const tick = () => {
       if (!state.mailbox || document.hidden) return;
       if (navigator.locks) navigator.locks.request(storageKey() + ':notify', deliverReminders).catch(() => {});
@@ -357,5 +367,5 @@ const personal = (() => {
     setInterval(tick, 5000);
   }
 
-  return {init, markedIds, contextChanged, resetPrivate, mailControls, toast};
+  return {init, markedIds, contextChanged, resetPrivate, mailControls, renderWatches, toast};
 })();

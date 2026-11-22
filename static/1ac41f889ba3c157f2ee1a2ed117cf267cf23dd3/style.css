@@ -497,9 +497,6 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
   #search-form { grid-area: 2 / 1 / 3 / -1; gap: 6px; }
   .topbar-actions { grid-area: 1 / 2; }
 }
-@media (max-width: 520px) {
-  .assistant-open span { display: none; }
-}
 @media (max-width: 380px) {
   .brand { gap: 5px; font-size: 1rem; }
   .brand img { width: 26px; height: 26px; }
@@ -518,6 +515,7 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
     padding: 10px 12px 0;
     overflow: visible;
   }
+  .sidebar .nav-group { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 6px; }
   .nav-inbox { min-height: 37px; gap: 6px; font-size: .8125rem; }
   .nav-inbox .icon { width: 17px; height: 17px; }
   .sidebar-footer { margin: 0; }
@@ -577,73 +575,84 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
 }
 
 .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.assistant-open { color: var(--accent-strong); }
-.assistant-panel {
-  position: fixed;
-  inset: calc(var(--header) + 8px) 12px 12px auto;
-  z-index: 4;
+.waiting-section {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(390px, calc(100vw - 24px));
-  border: 1px solid var(--line);
+  gap: 16px;
+  max-width: 880px;
+}
+.watch-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: clamp(14px, 2.5vw, 23px);
+  border: 1px solid #d7e5f7;
   border-radius: var(--radius);
-  background: var(--paper);
-  box-shadow: 0 12px 36px #152b4824;
+  background: #f5f9fe;
 }
-.assistant-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 15px;
-  border-bottom: 1px solid var(--line);
-}
-.assistant-bar h2 { font-size: 1.05rem; }
-.assistant-bar p { margin-top: 3px; color: var(--muted); font-size: .8125rem; }
-.assistant-content { overflow: auto; padding: 14px; }
-.assistant-examples, .assistant-results, #watch-items { display: grid; gap: 7px; }
-.assistant-results { margin-top: 15px; }
-.assistant-results p { font-size: .9rem; }
-.assistant-reply { font-weight: 650; }
-.assistant-source {
+.watch-form-icon, .watch-marker {
   display: grid;
-  gap: 4px;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
+  place-items: center;
+  width: 43px;
+  height: 43px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.watch-form h2 { font-size: 1.125rem; }
+.watch-form p { margin-top: 5px; color: var(--muted); line-height: 1.45; }
+.watch-form-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.watch-form-controls input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid #cdd9e9;
   border-radius: 9px;
   background: var(--paper);
-  text-align: left;
-  overflow-wrap: anywhere;
 }
-.assistant-source:hover { background: #f3f7fc; }
-.assistant-source span { color: var(--muted); font-size: .8125rem; line-height: 1.35; }
-.watch-panel { margin-top: 17px; }
-.watch-panel h3 { margin: 0 0 6px; font-size: .875rem; }
+.watch-form-controls .primary { display: inline-flex; align-items: center; gap: 6px; }
+.watch-form-controls .icon { width: 16px; height: 16px; }
+.watch-form .watch-status { margin-top: 9px; font-size: .875rem; color: var(--accent-strong); }
+.watch-form .watch-status.is-error { color: #a5342b; }
 .watch-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
-  padding: 8px;
-  border-radius: 8px;
-  background: var(--canvas);
+  gap: 10px;
+  padding: 13px 15px;
 }
-.watch-item div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.watch-item strong { font-size: .8125rem; }
-.watch-item p { color: var(--muted); font-size: .75rem; }
-.watch-item button { min-height: 30px; padding: 4px; font-size: .8125rem; }
-.assistant-form { display: flex; align-items: end; gap: 7px; padding: 10px; border-top: 1px solid var(--line); }
-.assistant-form textarea {
-  flex: 1;
-  min-width: 0;
-  max-height: 110px;
-  padding: 8px;
-  border: 1px solid #d5deeb;
-  border-radius: 8px;
-  color: var(--text);
-  font: inherit;
-  font-size: .875rem;
-  resize: vertical;
+.watch-item + .watch-item { border-top: 1px solid var(--line); }
+.watch-marker { width: 36px; height: 36px; }
+.watch-marker .icon { width: 18px; height: 18px; }
+.watch-item-text { min-width: 0; overflow-wrap: anywhere; }
+.watch-item h3 { margin: 0; font-size: .9375rem; }
+.watch-item p { margin: 3px 0 0; color: var(--muted); font-size: .8125rem; }
+.watch-state {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 3px 7px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: .75rem;
+  font-weight: 650;
 }
-.assistant-form button { min-height: 40px; padding-inline: 10px; }
+.watch-state.is-found { background: #e4f4e9; color: #266442; }
+.watch-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.watch-item-actions button { min-height: 34px; font-size: .8125rem; }
+@media (max-width: 480px) {
+  .watch-form { gap: 9px; }
+  .watch-form-icon { width: 34px; height: 34px; }
+  .watch-form-controls .primary { justify-content: center; width: 100%; }
+  .watch-item { grid-template-columns: auto minmax(0, 1fr); }
+  .watch-item-actions { grid-column: 2; }
+}
 
 .mail-controls {
   display: flex;
@@ -699,14 +708,6 @@ h1 { font-size: clamp(1.375rem, 2.1vw, 1.625rem); letter-spacing: -.024em; line-
 .notification-close { width: 30px; min-height: 30px; }
 .notification-close .icon { width: 16px; height: 16px; }
 .notification-open { grid-column: 2; justify-self: start; min-height: 29px; padding: 3px 6px; }
-@media (max-width: 800px) {
-  .assistant-open { min-width: 40px; }
-  .assistant-open span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-}
-@media (max-width: 620px) {
-  .assistant-open { min-height: 34px; min-width: 36px; padding: 5px; }
-}
-
 .mail-dialog {
   width: min(540px, calc(100% - 28px));
   max-width: none;
