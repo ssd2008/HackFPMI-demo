@@ -280,7 +280,10 @@ async function loadMailboxes({preserve = false} = {}) {
 }
 function setMode() {
   const searching = Boolean(state.query);
-  ui.title.textContent = searching ? 'Поиск по почте' : state.actionsOnly ? 'Требуют действия' : 'Входящие';
+  const folder = getBox(state.mailbox)?.folder === 'sent' ? 'Отправленные' : 'Входящие';
+  byId('nav-inbox').querySelector('span').textContent = folder;
+  ui.inbox.querySelector('span').textContent = 'В папку';
+  ui.title.textContent = searching ? 'Поиск по почте' : state.actionsOnly ? 'Требуют действия' : folder;
   ui.listTitle.textContent = searching ? 'Найденные письма' : state.actionsOnly ? 'Письма, которые требуют действия' : 'Все письма';
   const nav = byId('nav-inbox');
   if (searching || state.actionsOnly) nav.removeAttribute('aria-current');
@@ -407,7 +410,7 @@ function makeMailRow(mail) {
   const row = action('', 'mail-row', () => openMail(mail.id, mail.subject));
   const lines = node('span', 'mail-lines');
   const subject = mail.subject || 'Без темы';
-  const sender = mail.sender || 'Без отправителя';
+  const sender = mail.recipient ? 'Кому: ' + mail.recipient : mail.sender || 'Без отправителя';
   const snippet = state.actionsOnly ? mail.evidence || (mail.manual ? 'Помечено вручную' : '') : mail.snippet || '';
   lines.append(node('span', 'mail-subject', subject));
   if (snippet) lines.append(node('span', 'mail-snippet', snippet));
@@ -465,7 +468,7 @@ function renderList() {
   ui.count.hidden = false;
   ui.order.hidden = !state.items.length;
   if (!state.items.length) {
-    const reset = searching ? action('Во входящие', 'secondary', showInbox) : undefined;
+    const reset = searching ? action('В папку', 'secondary', showInbox) : undefined;
     const title = searching ? 'Подходящих писем не найдено' :
       state.actionsOnly ? 'Нет писем, которые требуют действия' : 'На эту дату писем нет';
     const detail = searching ? 'Измените запрос или дату поиска.' : 'Выберите другую дату или другой ящик.';
@@ -599,7 +602,7 @@ function cleanBody(original) {
   // The subject and sender are already visible above. Strip only explicit leading mail headers.
   const lines = String(original || '').replace(/\r\n?/g, '\n').split('\n');
   let start = 0;
-  while (start < lines.length && (!lines[start].trim() || /^(?:от|from|тема|subject)\s*:/iu.test(lines[start].trim()))) start++;
+  while (start < lines.length && (!lines[start].trim() || /^(?:от|from|кому|тема|subject)\s*:/iu.test(lines[start].trim()))) start++;
   if (start < lines.length) lines[start] = lines[start].replace(/^\s*(?:текст письма|тело письма)\s*:\s*/iu, '');
   return lines.slice(start).join('\n').trim() || String(original || '');
 }
@@ -611,7 +614,8 @@ function renderMail(mail) {
   const meta = node('dl', 'message-meta');
   const fields = [
     ['От', mail.sender || 'Отправитель не указан'],
-    ['Получено', mail.date ? dateText(mail.date, true) : 'Дата неизвестна']
+    ...(mail.recipient ? [['Кому', mail.recipient]] : []),
+    [getBox(state.mailbox)?.folder === 'sent' ? 'Дата письма' : 'Получено', mail.date ? dateText(mail.date, true) : 'Дата неизвестна']
   ];
   for (const [label, text] of fields) meta.append(node('dt', '', label), node('dd', '', text));
   const original = String(mail.body || '');

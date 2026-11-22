@@ -46,7 +46,6 @@ const visitorMail = (() => {
   }
   function cleanDialog() {
     el('account-form').reset();
-    providerHelp();
     el('accounts-list').replaceChildren();
     el('accounts-error-text').textContent = '';
     el('accounts-load-error').hidden = true;
@@ -77,34 +76,27 @@ const visitorMail = (() => {
       controllers.delete(controller);
     }
   }
-  function providerHelp() {
-    const yandex = el('account-form').elements.provider.value === 'yandex';
-    const link = el('account-password-link');
-    link.href = yandex ? 'https://passport.yandex.ru/security/app-passwords' : 'https://myaccount.google.com/apppasswords';
-    link.textContent = yandex ? 'Создать пароль приложения Яндекс ID' : 'Создать пароль приложения Google';
-  }
   function render() {
     el('open').hidden = !available;
-    el('open').querySelector('span').textContent = list.length ? 'Моя почта' : 'Подключить свою почту';
+    el('open').querySelector('span').textContent = list.length ? 'Моя почта' : 'Подключить Яндекс Почту';
     const target = el('accounts-list'), focus = document.activeElement?.dataset.syncId;
     const cards = document.createDocumentFragment();
     for (const account of list) {
-      const card = node('article', 'account-card'), title = node('div', 'account-title');
-      title.append(node('strong', '', account.address), node('span', 'account-provider', account.provider === 'gmail' ? 'Gmail' : 'Яндекс.Почта'));
+      const card = node('article', 'account-card');
       const active = syncing.has(account.id) || account.status === 'syncing';
       const status = node('span', 'account-phase', active ? 'Синхронизация…' : account.status === 'error' ? 'Ошибка синхронизации' :
         account.last_synced ? 'Синхронизировано' : 'Ожидает синхронизации');
       status.classList.toggle('is-error', account.status === 'error');
       const stamp = new Date(account.last_synced);
       const last = account.last_synced && !Number.isNaN(stamp.getTime()) ? ' · Обновлено ' + syncTime.format(stamp) : '';
-      card.append(title, status, node('p', 'account-caption', mailCount(account.count || 0) + last));
+      card.append(node('strong', 'account-title', account.address + (account.folder === 'sent' ? ' (Отправленные)' : '')), status, node('p', 'account-caption', mailCount(account.count || 0) + last));
       if (account.sync_limit && account.total_available > account.sync_limit) card.append(node('p', 'account-caption',
         'В ящике ' + mailCount(account.total_available) + '. В поиск попадают последние ' + numberFormat.format(account.sync_limit) + '.'));
       if (account.pending) card.append(node('p', 'account-pending', typeof account.pending === 'number' ?
         'Осталось загрузить ' + mailCount(account.pending) + '.' : 'В очереди есть письма.'));
       if (account.error) card.append(node('p', 'mail-feedback is-error', account.error));
       const controls = node('div', 'visitor-account-actions');
-      const inbox = action('Во входящие', 'text-action', async () => {
+      const inbox = action('Открыть папку', 'text-action', async () => {
         const current = version;
         if (!getBox(account.id)) await loadMailboxes({preserve: true});
         if (current !== version || !getBox(account.id)) return;
@@ -127,7 +119,7 @@ const visitorMail = (() => {
     if (!freq.hidden) freq.textContent = 'Автообновление каждые ' + (frequency % 60 ? frequency + ' сек.' : frequency / 60 + ' мин.');
     el('accounts-load-error').hidden = !error;
     el('accounts-error-text').textContent = error;
-    for (const id of ['account-provider', 'account-address', 'account-password', 'account-connect']) el(id).disabled = busy;
+    for (const id of ['account-address', 'account-folder', 'account-password', 'account-connect']) el(id).disabled = busy;
     const logout = el('accounts-logout');
     logout.hidden = !session;
     logout.disabled = busy;
@@ -188,8 +180,9 @@ const visitorMail = (() => {
   async function connect(event) {
     event.preventDefault();
     if (!available || busy || !el('account-form').reportValidity()) return;
-    const provider = el('account-form').elements.provider.value, address = el('account-address').value.trim();
+    const address = el('account-address').value.trim();
     const password = el('account-password').value;
+    const folder = el('account-folder').value;
     el('account-password').value = '';
     const start = pauseReads();
     let connected = false;
@@ -208,7 +201,7 @@ const visitorMail = (() => {
         try { sessionStorage.setItem(storageKey(), JSON.stringify(session)); } catch { /* The session still works in this page. */ }
         timer();
       }
-      const {account} = await request('accounts', {provider, address, password}, 90000);
+      const {account} = await request('accounts', {provider: 'yandex', address, password, folder}, 90000);
       if (start !== version) return;
       if (!account?.id) throw new Error('Сервер не вернул подключённый ящик.');
       connected = true;
@@ -260,7 +253,6 @@ const visitorMail = (() => {
     el('open').addEventListener('click', open);
     el('accounts-close').addEventListener('click', () => el('accounts-dialog').close());
     el('account-form').addEventListener('submit', connect);
-    el('account-provider').addEventListener('change', providerHelp);
     el('accounts-retry').addEventListener('click', load);
     el('accounts-logout').addEventListener('click', logout);
     el('accounts-dialog').addEventListener('close', () => {
