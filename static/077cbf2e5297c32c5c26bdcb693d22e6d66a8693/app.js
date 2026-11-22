@@ -238,6 +238,10 @@ async function loadMailboxes({preserve = false} = {}) {
     const data = await fetchJSON('/api/mailboxes', controller);
     if (!current('boxes', controller)) return false;
     const active = getBox(state.mailbox);
+    const files = byId('include-attachments');
+    files.disabled = data.attachment_search !== true;
+    files.parentElement.hidden = files.disabled;
+    if (files.disabled) files.checked = false;
     const visitor = !state.demo && data.visitor_mail === true;
     if (data.visitor_mail === false && visitorMail.token()) {
       visitorMail.end(visitorMail.token(), 'Подключение личной почты отключено.');
@@ -280,7 +284,10 @@ async function loadMailboxes({preserve = false} = {}) {
 }
 function setMode() {
   const searching = Boolean(state.query);
-  ui.title.textContent = searching ? 'Поиск по почте' : state.actionsOnly ? 'Требуют действия' : 'Входящие';
+  const folder = getBox(state.mailbox)?.folder === 'sent' ? 'Отправленные' : 'Входящие';
+  byId('nav-inbox').querySelector('span').textContent = folder;
+  ui.inbox.querySelector('span').textContent = 'В папку';
+  ui.title.textContent = searching ? 'Поиск по почте' : state.actionsOnly ? 'Требуют действия' : folder;
   ui.listTitle.textContent = searching ? 'Найденные письма' : state.actionsOnly ? 'Письма, которые требуют действия' : 'Все письма';
   const nav = byId('nav-inbox');
   if (searching || state.actionsOnly) nav.removeAttribute('aria-current');
@@ -363,7 +370,7 @@ async function showSearch(query) {
   setListLoading('Ищем письма…');
   try {
     const data = await fetchJSON('/api/search', controller, {
-      mailbox: state.mailbox, date: state.date, ...dateRange(), query: text, limit: searchLimit
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: text, limit: searchLimit, ...fileOption()
     });
     if (!current('list', controller)) return;
     state.searchResults = data.items;
@@ -372,6 +379,7 @@ async function showSearch(query) {
     byId('sort-text').textContent = Number.isFinite(latency)
       ? 'По релевантности · ' + numberFormat.format(Math.round(latency)) + ' мс'
       : 'По релевантности';
+    if (data.partial_attachment_search) byId('sort-text').textContent += ' · Вложения проверены частично';
     renderSearchPage(0);
     if (state.total) renderAnswerPrompt();
   } catch (error) {
@@ -407,7 +415,7 @@ function makeMailRow(mail) {
   const row = action('', 'mail-row', () => openMail(mail.id, mail.subject));
   const lines = node('span', 'mail-lines');
   const subject = mail.subject || 'Без темы';
-  const sender = mail.sender || 'Без отправителя';
+  const sender = mail.recipient ? 'Кому: ' + mail.recipient : mail.sender || 'Без отправителя';
   const snippet = state.actionsOnly ? mail.evidence || (mail.manual ? 'Помечено вручную' : '') : mail.snippet || '';
   lines.append(node('span', 'mail-subject', subject));
   if (snippet) lines.append(node('span', 'mail-snippet', snippet));
@@ -465,7 +473,7 @@ function renderList() {
   ui.count.hidden = false;
   ui.order.hidden = !state.items.length;
   if (!state.items.length) {
-    const reset = searching ? action('Во входящие', 'secondary', showInbox) : undefined;
+    const reset = searching ? action('В папку', 'secondary', showInbox) : undefined;
     const title = searching ? 'Подходящих писем не найдено' :
       state.actionsOnly ? 'Нет писем, которые требуют действия' : 'На эту дату писем нет';
     const detail = searching ? 'Измените запрос или дату поиска.' : 'Выберите другую дату или другой ящик.';
@@ -575,7 +583,7 @@ async function generateAnswer() {
   announce('Готовим ответ по найденным письмам.');
   try {
     const data = await fetchJSON('/api/answer', controller, {
-      mailbox: state.mailbox, date: state.date, ...dateRange(), query: state.query
+      mailbox: state.mailbox, date: state.date, ...dateRange(), query: state.query, ...fileOption()
     });
     if (!current('answer', controller)) return;
     ui.answer.setAttribute('aria-busy', 'false');
@@ -599,7 +607,7 @@ function cleanBody(original) {
   // The subject and sender are already visible above. Strip only explicit leading mail headers.
   const lines = String(original || '').replace(/\r\n?/g, '\n').split('\n');
   let start = 0;
-  while (start < lines.length && (!lines[start].trim() || /^(?:от|from|тема|subject)\s*:/iu.test(lines[start].trim()))) start++;
+  while (start < lines.length && (!lines[start].trim() || /^(?:от|from|кому|тема|subject)\s*:/iu.test(lines[start].trim()))) start++;
   if (start < lines.length) lines[start] = lines[start].replace(/^\s*(?:текст письма|тело письма)\s*:\s*/iu, '');
   return lines.slice(start).join('\n').trim() || String(original || '');
 }
@@ -611,7 +619,8 @@ function renderMail(mail) {
   const meta = node('dl', 'message-meta');
   const fields = [
     ['От', mail.sender || 'Отправитель не указан'],
-    ['Получено', mail.date ? dateText(mail.date, true) : 'Дата неизвестна']
+    ...(mail.recipient ? [['Кому', mail.recipient]] : []),
+    [getBox(state.mailbox)?.folder === 'sent' ? 'Дата письма' : 'Получено', mail.date ? dateText(mail.date, true) : 'Дата неизвестна']
   ];
   for (const [label, text] of fields) meta.append(node('dt', '', label), node('dd', '', text));
   const original = String(mail.body || '');
@@ -630,6 +639,9 @@ function renderMail(mail) {
     ui.readerContent.append(toggle);
   }
   ui.readerContent.append(body);
+  for (const file of mail.attachments || []) {
+    ui.readerContent.append(node('strong', '', file.filename), node('p', '', file.description || 'Текст недоступен'));
+  }
   ui.readerContent.scrollTop = 0;
 }
 async function openMail(id, subject) {
@@ -641,7 +653,7 @@ async function openMail(id, subject) {
   ui.readerContent.setAttribute('aria-busy', 'true');
   try {
     const mail = await fetchJSON('/api/mail/' + encodeURIComponent(id) + params({
-      mailbox: state.mailbox, date: state.date
+      mailbox: state.mailbox, date: state.date, ...fileOption()
     }), controller);
     if (!current('mail', controller) || !ui.reader.open) return;
     ui.readerContent.setAttribute('aria-busy', 'false');
@@ -656,6 +668,12 @@ async function openMail(id, subject) {
   }
 }
 
+function fileOption() {
+  return byId('include-attachments').checked ? {include_attachments: true} : {};
+}
+byId('include-attachments').addEventListener('change', () => {
+  if (state.query) showSearch(state.query);
+});
 byId('search-form').addEventListener('submit', event => {
   event.preventDefault();
   if (ui.input.disabled) return;

@@ -89,14 +89,14 @@ const visitorMail = (() => {
       status.classList.toggle('is-error', account.status === 'error');
       const stamp = new Date(account.last_synced);
       const last = account.last_synced && !Number.isNaN(stamp.getTime()) ? ' · Обновлено ' + syncTime.format(stamp) : '';
-      card.append(node('strong', 'account-title', account.address), status, node('p', 'account-caption', mailCount(account.count || 0) + last));
+      card.append(node('strong', 'account-title', account.address + (account.folder === 'sent' ? ' (Отправленные)' : '')), status, node('p', 'account-caption', mailCount(account.count || 0) + last));
       if (account.sync_limit && account.total_available > account.sync_limit) card.append(node('p', 'account-caption',
         'В ящике ' + mailCount(account.total_available) + '. В поиск попадают последние ' + numberFormat.format(account.sync_limit) + '.'));
       if (account.pending) card.append(node('p', 'account-pending', typeof account.pending === 'number' ?
         'Осталось загрузить ' + mailCount(account.pending) + '.' : 'В очереди есть письма.'));
       if (account.error) card.append(node('p', 'mail-feedback is-error', account.error));
       const controls = node('div', 'visitor-account-actions');
-      const inbox = action('Во входящие', 'text-action', async () => {
+      const inbox = action('Открыть папку', 'text-action', async () => {
         const current = version;
         if (!getBox(account.id)) await loadMailboxes({preserve: true});
         if (current !== version || !getBox(account.id)) return;
@@ -119,7 +119,7 @@ const visitorMail = (() => {
     if (!freq.hidden) freq.textContent = 'Автообновление каждые ' + (frequency % 60 ? frequency + ' сек.' : frequency / 60 + ' мин.');
     el('accounts-load-error').hidden = !error;
     el('accounts-error-text').textContent = error;
-    for (const id of ['account-address', 'account-password', 'account-connect']) el(id).disabled = busy;
+    for (const id of ['account-address', 'account-folder', 'account-password', 'account-connect']) el(id).disabled = busy;
     const logout = el('accounts-logout');
     logout.hidden = !session;
     logout.disabled = busy;
@@ -182,6 +182,7 @@ const visitorMail = (() => {
     if (!available || busy || !el('account-form').reportValidity()) return;
     const address = el('account-address').value.trim();
     const password = el('account-password').value;
+    const folder = el('account-folder').value;
     el('account-password').value = '';
     const start = pauseReads();
     let connected = false;
@@ -200,7 +201,7 @@ const visitorMail = (() => {
         try { sessionStorage.setItem(storageKey(), JSON.stringify(session)); } catch { /* The session still works in this page. */ }
         timer();
       }
-      const {account} = await request('accounts', {provider: 'yandex', address, password}, 90000);
+      const {account} = await request('accounts', {provider: 'yandex', address, password, folder}, 90000);
       if (start !== version) return;
       if (!account?.id) throw new Error('Сервер не вернул подключённый ящик.');
       connected = true;

@@ -46,7 +46,11 @@ const demoApi = (() => {
     mailbox, id: 'example-' + (index + 1), sender, subject, snippet, date: '2026-11-' + day, task, event
   })).sort((a, b) => b.date.localeCompare(a.date));
 
-  function search(visible, query, date) {
+  const sampleFiles = {
+    'example-1': [{filename: 'Программа.txt', description: 'В декабре обсудим роман Солярис.'}]
+  };
+
+  function search(visible, query, date, includeAttachments = false) {
     const terms = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
     const words = terms.filter(word => !['за', 'вчера', 'сегодня', 'позавчера'].includes(word) && word.length > 2);
     const daysBack = terms.includes('позавчера') ? 2 : terms.includes('вчера') ? 1 : 0;
@@ -56,7 +60,8 @@ const demoApi = (() => {
       .filter(letter => !restricted || letter.date === day)
       .map(letter => {
         const subject = letter.subject.toLowerCase();
-        const body = (letter.sender + ' ' + letter.snippet).toLowerCase();
+        const files = includeAttachments ? sampleFiles[letter.id] || [] : [];
+        const body = [letter.sender, letter.snippet, ...files.map(f => f.filename + ' ' + f.description)].join(' ').toLowerCase();
         const score = words.reduce((sum, word) => sum + (subject.includes(word) ? 2 : Number(body.includes(word))), 0);
         return {letter, score};
       })
@@ -69,6 +74,7 @@ const demoApi = (() => {
     const {pathname, searchParams} = new URL(path, location.origin);
     if (pathname === '/api/mailboxes') {
       return {
+        attachment_search: true,
         mailboxes: boxes.map(box => ({...box, count: letters.filter(letter => letter.mailbox === box.id).length})),
         default_mailbox: boxes[0].id,
         default_date: defaultDate
@@ -104,7 +110,7 @@ const demoApi = (() => {
     }
     if (pathname.startsWith('/api/mail/')) {
       const letter = visible.find(item => item.id === decodeURIComponent(pathname.slice('/api/mail/'.length)));
-      if (letter) return {...letter, body: letter.snippet, requires_action: Boolean(letter.task)};
+      if (letter) return {...letter, attachments: searchParams.get('include_attachments') === 'true' ? sampleFiles[letter.id] : [], body: letter.snippet, requires_action: Boolean(letter.task)};
       throw Object.assign(new Error('Письмо не найдено'), {status: 404});
     }
     if (pathname === '/api/assistant/watch') {
@@ -130,14 +136,14 @@ const demoApi = (() => {
       }
       return {kind: 'mail', items: search(visible, body.query, date).slice(0, 6)};
     }
-    const items = search(visible, body.query, date);
+    const items = search(visible, body.query, date, body.include_attachments);
     if (pathname === '/api/search') return {items: items.slice(0, body.limit)};
     const sources = items.slice(0, 3);
     return {
       sources,
       mode: sources.length ? 'extractive' : 'no_evidence',
       answer: sources.length
-        ? sources.map((letter, index) => letter.snippet + ' [' + (index + 1) + ']').join('\n\n')
+        ? sources.map((letter, index) => [letter.snippet, ...(body.include_attachments ? (sampleFiles[letter.id] || []).map(f => f.description) : [])].join(' ') + ' [' + (index + 1) + ']').join('\n\n')
         : 'В выбранном ящике нет писем с подходящими сведениями.'
     };
   };
